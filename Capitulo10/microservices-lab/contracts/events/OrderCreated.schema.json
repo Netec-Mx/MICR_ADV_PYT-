@@ -1,0 +1,97 @@
+{
+  "$defs": {
+    "RequestedItem": {
+      "additionalProperties": false,
+      "properties": {
+        "product_id": {
+          "format": "uuid",
+          "title": "Product Id",
+          "type": "string"
+        },
+        "quantity": {
+          "maximum": 1000,
+          "minimum": 1,
+          "title": "Quantity",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "product_id",
+        "quantity"
+      ],
+      "title": "RequestedItem",
+      "type": "object"
+    }
+  },
+  "additionalProperties": false,
+  "properties": {
+    "event_id": {
+      "format": "uuid4",
+      "title": "Event Id",
+      "type": "string"
+    },
+    "event_version": {
+      "const": "1.0.0",
+      "default": "1.0.0",
+      "enum": [
+        "1.0.0"
+      ],
+      "title": "Event Version",
+      "type": "string"
+    },
+    "timestamp": {
+      "format": "date-time",
+      "title": "Timestamp",
+      "type": "string"
+    },
+    "correlation_id": {
+      "format": "uuid4",
+      "title": "Correlation Id",
+      "type": "string"
+    },
+    "event_type": {
+      "const": "OrderCreated",
+      "default": "OrderCreated",
+      "enum": [
+        "OrderCreated"
+      ],
+      "title": "Event Type",
+      "type": "string"
+    },
+    "source_service": {
+      "const": "order-service",
+      "default": "order-service",
+      "enum": [
+        "order-service"
+      ],
+      "title": "Source Service",
+      "type": "string"
+    },
+    "order_id": {
+      "format": "uuid",
+      "title": "Order Id",
+      "type": "string"
+    },
+    "customer_id": {
+      "format": "uuid",
+      "title": "Customer Id",
+      "type": "string"
+    },
+    "items": {
+      "items": {
+        "$ref": "#/$defs/RequestedItem"
+      },
+      "maxItems": 100,
+      "minItems": 1,
+      "title": "Items",
+      "type": "array"
+    }
+  },
+  "required": [
+    "order_id",
+    "customer_id",
+    "items"
+  ],
+  "title": "OrderCreated",
+  "type": "object"
+}

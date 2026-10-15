@@ -1,0 +1,27 @@
+name: order-service
+port: 8001
+image:
+  repository: localhost:5000/order-service
+env:
+  AUTH_ENABLED: 'true'
+  AUTH_ISSUER: http://localhost:8080/realms/microservices-lab
+  AUTH_JWKS_URL: http://keycloak:8080/realms/microservices-lab/protocol/openid-connect/certs
+  MESSAGING_ENABLED: 'true'
+  KAFKA_BOOTSTRAP_SERVERS: kafka:9092
+  EVENTSTORE_ENABLED: 'true'
+  RESILIENCE_ENABLED: 'true'
+  AUTH_TOKEN_URL: http://keycloak:8080/realms/microservices-lab/protocol/openid-connect/token
+  ORDER_SERVICE_CLIENT_ID: order-service-client
+  INVENTORY_BASE_URL: http://inventory-service:8002
+  RESILIENCE_REDIS_URL: redis://redis:6379/1
+  RESILIENCE_NAMESPACE: lab06:orders:normal:inventory
+  RESILIENCE_FAIL_MAX: '5'
+  RESILIENCE_RESET_TIMEOUT: '30'
+  RESILIENCE_MAX_CONCURRENT: '10'
+  VAULT_ADDR: http://vault.vault.svc:8200
+  VAULT_ROLE: order-service
+  VAULT_SECRET_PATH: order-service
+  VAULT_POLL_SECONDS: '5'
+  VAULT_MAX_AGE_SECONDS: '20'
+  OBSERVABILITY_ENABLED: 'true'
+  OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector.observability.svc:4317

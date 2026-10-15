@@ -1,0 +1,10 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ .Values.name }}-config
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "msvc.labels" . | nindent 4 }}
+data:
+  APP_VERSION: {{ .Values.appVersion | quote }}
+  SERVICE_NAME: {{ .Values.name | quote }}

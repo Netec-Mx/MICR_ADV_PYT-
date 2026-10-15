@@ -1,0 +1,88 @@
+rule_files:
+- ../chart/files/rules.yaml
+evaluation_interval: 1m
+group_eval_order:
+- microservices-red
+- microservices-slos
+tests:
+- name: healthy and no 5xx series produces zero error ratio
+  interval: 1m
+  input_series:
+  - series: http_requests_total{job="microservices",service="order-service",status="200",method="GET",handler="/api/v1/orders"}
+    values: 0+100x15
+  - series: http_request_duration_seconds_bucket{job="microservices",service="order-service",le="0.5"}
+    values: 0+100x15
+  - series: http_request_duration_seconds_bucket{job="microservices",service="order-service",le="1"}
+    values: 0+100x15
+  - series: http_request_duration_seconds_bucket{job="microservices",service="order-service",le="+Inf"}
+    values: 0+100x15
+  alert_rule_test:
+  - eval_time: 10m
+    alertname: HighErrorRate
+    exp_alerts: []
+  - eval_time: 10m
+    alertname: HighLatencyP99
+    exp_alerts: []
+  promql_expr_test:
+  - expr: lab:http_error_ratio:5m
+    eval_time: 10m
+    exp_samples:
+    - labels: '{__name__="lab:http_error_ratio:5m",service="order-service"}'
+      value: 0
+- name: 5xx threshold waits full five minutes
+  interval: 1m
+  input_series:
+  - series: http_requests_total{job="microservices",service="order-service",status="200",method="GET",handler="/api/v1/orders"}
+    values: 0+90x15
+  - series: http_requests_total{job="microservices",service="order-service",status="500",method="GET",handler="/api/v1/orders"}
+    values: 0+10x15
+  - series: http_request_duration_seconds_bucket{job="microservices",service="order-service",le="0.5"}
+    values: 0+100x15
+  - series: http_request_duration_seconds_bucket{job="microservices",service="order-service",le="1"}
+    values: 0+100x15
+  - series: http_request_duration_seconds_bucket{job="microservices",service="order-service",le="+Inf"}
+    values: 0+100x15
+  alert_rule_test:
+  - eval_time: 4m
+    alertname: HighErrorRate
+    exp_alerts: []
+  - eval_time: 7m
+    alertname: HighErrorRate
+    exp_alerts:
+    - exp_labels:
+        service: order-service
+        severity: critical
+      exp_annotations:
+        summary: Tasa de errores 5xx supera 1%
+- name: p99 above 500ms waits two minutes
+  interval: 1m
+  input_series:
+  - series: http_requests_total{job="microservices",service="order-service",status="200",method="GET",handler="/api/v1/orders"}
+    values: 0+100x15
+  - series: http_request_duration_seconds_bucket{job="microservices",service="order-service",le="0.5"}
+    values: 0+0x15
+  - series: http_request_duration_seconds_bucket{job="microservices",service="order-service",le="1"}
+    values: 0+100x15
+  - series: http_request_duration_seconds_bucket{job="microservices",service="order-service",le="+Inf"}
+    values: 0+100x15
+  alert_rule_test:
+  - eval_time: 2m
+    alertname: HighLatencyP99
+    exp_alerts: []
+  - eval_time: 4m
+    alertname: HighLatencyP99
+    exp_alerts:
+    - exp_labels:
+        service: order-service
+        severity: warning
+      exp_annotations:
+        summary: Latencia p99 supera 500 ms
+- name: no traffic does not cause error alert
+  interval: 1m
+  input_series:
+  - series: http_requests_total{job="microservices",service="order-service",status="200",method="GET",handler="/api/v1/orders"}
+    values: 0+0x15
+  alert_rule_test:
+  - eval_time: 10m
+    alertname: HighErrorRate
+    exp_alerts: []

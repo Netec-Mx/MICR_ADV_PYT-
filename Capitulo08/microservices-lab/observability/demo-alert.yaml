@@ -1,0 +1,10 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: lab08-demo-rules
+  namespace: monitoring
+data:
+  rules.yaml: "groups:\n- name: lab08-transport-test\n  rules:\n  - alert: Lab08PipelineTest\n\
+    \    expr: vector(1)\n    for: 0s\n    labels:\n      severity: info\n      service:\
+    \ lab08-demo\n    annotations:\n      summary: Prueba temporal del transporte\
+    \ Prometheus a Alertmanager\n"

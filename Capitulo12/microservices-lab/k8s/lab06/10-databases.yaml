@@ -1,0 +1,184 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: postgres
+  namespace: microservices
+spec:
+  selector:
+    app: postgres
+  ports:
+  - name: tcp
+    port: 5432
+    targetPort: 5432
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: postgres
+  namespace: microservices
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: postgres
+  template:
+    metadata:
+      labels:
+        app: postgres
+    spec:
+      containers:
+      - name: postgres
+        image: postgres:16.3-alpine
+        imagePullPolicy: IfNotPresent
+        ports:
+        - containerPort: 5432
+        env:
+        - name: POSTGRES_USER
+          value: lab_admin
+        - name: POSTGRES_DB
+          value: eventstore_db
+        - name: PGDATA
+          value: /var/lib/postgresql/data/pgdata
+        - name: POSTGRES_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: lab06-secrets
+              key: POSTGRES_PASSWORD
+        resources:
+          requests:
+            cpu: 100m
+            memory: 128Mi
+          limits:
+            cpu: '1'
+            memory: 512Mi
+        volumeMounts:
+        - name: data
+          mountPath: /var/lib/postgresql/data
+        - name: init
+          mountPath: /docker-entrypoint-initdb.d
+          readOnly: true
+        readinessProbe:
+          exec: &id001
+            command:
+            - pg_isready
+            - -h
+            - 127.0.0.1
+            - -h
+            - 127.0.0.1
+            - -U
+            - lab_admin
+            - -d
+            - eventstore_db
+          periodSeconds: 5
+          timeoutSeconds: 3
+          failureThreshold: 12
+        startupProbe:
+          exec: *id001
+          periodSeconds: 5
+          timeoutSeconds: 3
+          failureThreshold: 60
+      automountServiceAccountToken: false
+      terminationGracePeriodSeconds: 30
+      volumes:
+      - name: init
+        configMap:
+          name: postgres-init
+  serviceName: postgres
+  volumeClaimTemplates:
+  - metadata:
+      name: data
+    spec:
+      accessModes:
+      - ReadWriteOnce
+      resources:
+        requests:
+          storage: 2Gi
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: keycloak-db
+  namespace: microservices
+spec:
+  selector:
+    app: keycloak-db
+  ports:
+  - name: tcp
+    port: 5432
+    targetPort: 5432
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: keycloak-db
+  namespace: microservices
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: keycloak-db
+  template:
+    metadata:
+      labels:
+        app: keycloak-db
+    spec:
+      containers:
+      - name: keycloak-db
+        image: postgres:16.3-alpine
+        imagePullPolicy: IfNotPresent
+        ports:
+        - containerPort: 5432
+        env:
+        - name: POSTGRES_USER
+          value: keycloak
+        - name: POSTGRES_DB
+          value: keycloak
+        - name: PGDATA
+          value: /var/lib/postgresql/data/pgdata
+        - name: POSTGRES_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: lab06-secrets
+              key: KEYCLOAK_DB_PASSWORD
+        resources:
+          requests:
+            cpu: 100m
+            memory: 128Mi
+          limits:
+            cpu: '1'
+            memory: 512Mi
+        volumeMounts:
+        - name: data
+          mountPath: /var/lib/postgresql/data
+        readinessProbe:
+          exec: &id001
+            command:
+            - pg_isready
+            - -h
+            - 127.0.0.1
+            - -h
+            - 127.0.0.1
+            - -U
+            - keycloak
+            - -d
+            - keycloak
+          periodSeconds: 5
+          timeoutSeconds: 3
+          failureThreshold: 12
+        startupProbe:
+          exec: *id001
+          periodSeconds: 5
+          timeoutSeconds: 3
+          failureThreshold: 60
+      automountServiceAccountToken: false
+      terminationGracePeriodSeconds: 30
+  serviceName: keycloak-db
+  volumeClaimTemplates:
+  - metadata:
+      name: data
+    spec:
+      accessModes:
+      - ReadWriteOnce
+      resources:
+        requests:
+          storage: 2Gi

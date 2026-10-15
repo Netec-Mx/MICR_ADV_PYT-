@@ -1,0 +1,20 @@
+.venv/
+__pycache__/
+.pytest_cache/
+.hypothesis/
+*.pyc
+
+# Local OAuth token files
+*-token.json
+token.json
+
+.venv312/
+
+# Generated CI/GitOps credentials and state
+reports/lab11/*
+!reports/lab11/revision-verification.md
+.gitops-work/
+.ci-state/
+.coverage*
+coverage*.xml
+test-results*.xml

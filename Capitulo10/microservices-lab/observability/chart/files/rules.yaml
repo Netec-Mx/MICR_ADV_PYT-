@@ -1,0 +1,35 @@
+groups:
+- name: microservices-red
+  rules:
+  - record: lab:http_request_rate:5m
+    expr: sum by (service) (rate(http_requests_total{job="microservices"}[5m]))
+  - record: lab:http_error_ratio:5m
+    expr: ((sum by (service) (rate(http_requests_total{job="microservices",status=~"5.."}[5m])))
+      or on (service) (0 * (sum by (service) (rate(http_requests_total{job="microservices"}[5m])))))
+      / (sum by (service) (rate(http_requests_total{job="microservices"}[5m])))
+  - record: lab:http_latency_p99:5m
+    expr: histogram_quantile(0.99, sum by (service, le) (rate(http_request_duration_seconds_bucket{job="microservices"}[5m])))
+- name: microservices-slos
+  rules:
+  - alert: HighLatencyP99
+    expr: lab:http_latency_p99:5m > 0.5
+    for: 2m
+    labels:
+      severity: warning
+    annotations:
+      summary: Latencia p99 supera 500 ms
+  - alert: HighErrorRate
+    expr: (lab:http_error_ratio:5m > 0.01) and on(service) (lab:http_request_rate:5m
+      > 0)
+    for: 5m
+    labels:
+      severity: critical
+    annotations:
+      summary: Tasa de errores 5xx supera 1%
+  - alert: MicroserviceMetricsUnavailable
+    expr: up{job="microservices"} == 0
+    for: 1m
+    labels:
+      severity: warning
+    annotations:
+      summary: Scrape de microservicio no disponible

@@ -1,0 +1,34 @@
+rule_files:
+- ../../observability/chart/files/lab12-slo-standalone.yaml
+evaluation_interval: 15s
+tests:
+- interval: 15s
+  input_series:
+  - series: 'k6_lab12_requests_total{service="order-service",run_id="test"}'
+    values: '0+100x20'
+  - series: 'k6_lab12_bad_requests_total{service="order-service",run_id="test"}'
+    values: '0+50x20'
+  - series: 'k6_lab12_slow_requests_total{service="order-service",run_id="test"}'
+    values: '0+20x20'
+  promql_expr_test:
+  - expr: 'lab12:availability:ratio2m'
+    eval_time: 3m
+    exp_samples:
+    - labels: '{__name__="lab12:availability:ratio2m",service="order-service",run_id="test"}'
+      value: 0.5
+  - expr: 'lab12:availability:burn2m'
+    eval_time: 3m
+    exp_samples:
+    - labels: '{__name__="lab12:availability:burn2m",service="order-service",run_id="test"}'
+      value: 100
+  - expr: 'lab12:latency:good_ratio2m'
+    eval_time: 3m
+    exp_samples:
+    - labels: '{__name__="lab12:latency:good_ratio2m",service="order-service",run_id="test"}'
+      value: 0.8
+- interval: 15s
+  input_series: []
+  promql_expr_test:
+  - expr: 'lab12:availability:ratio2m'
+    eval_time: 3m
+    exp_samples: []

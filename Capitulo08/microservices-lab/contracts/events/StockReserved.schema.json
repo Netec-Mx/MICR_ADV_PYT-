@@ -1,0 +1,109 @@
+{
+  "$defs": {
+    "ReservedItem": {
+      "additionalProperties": false,
+      "properties": {
+        "product_id": {
+          "format": "uuid",
+          "title": "Product Id",
+          "type": "string"
+        },
+        "quantity_reserved": {
+          "maximum": 100000,
+          "minimum": 1,
+          "title": "Quantity Reserved",
+          "type": "integer"
+        },
+        "remaining_stock": {
+          "minimum": 0,
+          "title": "Remaining Stock",
+          "type": "integer"
+        },
+        "reservation_id": {
+          "format": "uuid4",
+          "title": "Reservation Id",
+          "type": "string"
+        }
+      },
+      "required": [
+        "product_id",
+        "quantity_reserved",
+        "remaining_stock",
+        "reservation_id"
+      ],
+      "title": "ReservedItem",
+      "type": "object"
+    }
+  },
+  "additionalProperties": false,
+  "properties": {
+    "event_id": {
+      "format": "uuid4",
+      "title": "Event Id",
+      "type": "string"
+    },
+    "event_version": {
+      "const": "1.0.0",
+      "default": "1.0.0",
+      "enum": [
+        "1.0.0"
+      ],
+      "title": "Event Version",
+      "type": "string"
+    },
+    "timestamp": {
+      "format": "date-time",
+      "title": "Timestamp",
+      "type": "string"
+    },
+    "correlation_id": {
+      "format": "uuid4",
+      "title": "Correlation Id",
+      "type": "string"
+    },
+    "event_type": {
+      "const": "StockReserved",
+      "default": "StockReserved",
+      "enum": [
+        "StockReserved"
+      ],
+      "title": "Event Type",
+      "type": "string"
+    },
+    "source_service": {
+      "const": "inventory-service",
+      "default": "inventory-service",
+      "enum": [
+        "inventory-service"
+      ],
+      "title": "Source Service",
+      "type": "string"
+    },
+    "causation_id": {
+      "format": "uuid4",
+      "title": "Causation Id",
+      "type": "string"
+    },
+    "order_id": {
+      "format": "uuid",
+      "title": "Order Id",
+      "type": "string"
+    },
+    "items": {
+      "items": {
+        "$ref": "#/$defs/ReservedItem"
+      },
+      "maxItems": 100,
+      "minItems": 1,
+      "title": "Items",
+      "type": "array"
+    }
+  },
+  "required": [
+    "causation_id",
+    "order_id",
+    "items"
+  ],
+  "title": "StockReserved",
+  "type": "object"
+}

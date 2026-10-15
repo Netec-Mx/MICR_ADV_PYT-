@@ -1,0 +1,15 @@
+apiVersion: chaos-mesh.org/v1alpha1
+metadata:
+  namespace: chaos-testing
+  labels:
+    lab12-owned: 'true'
+  name: lab12-pod-kill
+kind: PodChaos
+spec:
+  action: pod-kill
+  mode: one
+  selector:
+    namespaces:
+    - microservices
+    labelSelectors:
+      app: order-service

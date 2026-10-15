@@ -1,0 +1,28 @@
+apiVersion: chaos-mesh.org/v1alpha1
+metadata:
+  namespace: chaos-testing
+  labels:
+    lab12-owned: 'true'
+  name: lab12-network-delay
+kind: NetworkChaos
+spec:
+  action: delay
+  mode: one
+  selector:
+    namespaces:
+    - microservices
+    labelSelectors:
+      app: order-service
+  direction: to
+  target:
+    mode: all
+    selector:
+      namespaces:
+      - microservices
+      labelSelectors:
+        lab10-service: inventory-service
+  delay:
+    latency: 200ms
+    jitter: 50ms
+    correlation: '0'
+  duration: 60s

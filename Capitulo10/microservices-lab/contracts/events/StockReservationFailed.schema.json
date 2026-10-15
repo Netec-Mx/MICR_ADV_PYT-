@@ -1,0 +1,91 @@
+{
+  "additionalProperties": false,
+  "properties": {
+    "event_id": {
+      "format": "uuid4",
+      "title": "Event Id",
+      "type": "string"
+    },
+    "event_version": {
+      "const": "1.0.0",
+      "default": "1.0.0",
+      "enum": [
+        "1.0.0"
+      ],
+      "title": "Event Version",
+      "type": "string"
+    },
+    "timestamp": {
+      "format": "date-time",
+      "title": "Timestamp",
+      "type": "string"
+    },
+    "correlation_id": {
+      "format": "uuid4",
+      "title": "Correlation Id",
+      "type": "string"
+    },
+    "event_type": {
+      "const": "StockReservationFailed",
+      "default": "StockReservationFailed",
+      "enum": [
+        "StockReservationFailed"
+      ],
+      "title": "Event Type",
+      "type": "string"
+    },
+    "source_service": {
+      "const": "inventory-service",
+      "default": "inventory-service",
+      "enum": [
+        "inventory-service"
+      ],
+      "title": "Source Service",
+      "type": "string"
+    },
+    "causation_id": {
+      "format": "uuid4",
+      "title": "Causation Id",
+      "type": "string"
+    },
+    "order_id": {
+      "format": "uuid",
+      "title": "Order Id",
+      "type": "string"
+    },
+    "product_id": {
+      "format": "uuid",
+      "title": "Product Id",
+      "type": "string"
+    },
+    "quantity_requested": {
+      "maximum": 100000,
+      "minimum": 1,
+      "title": "Quantity Requested",
+      "type": "integer"
+    },
+    "available_stock": {
+      "minimum": 0,
+      "title": "Available Stock",
+      "type": "integer"
+    },
+    "reason": {
+      "enum": [
+        "PRODUCT_NOT_FOUND",
+        "INSUFFICIENT_STOCK"
+      ],
+      "title": "Reason",
+      "type": "string"
+    }
+  },
+  "required": [
+    "causation_id",
+    "order_id",
+    "product_id",
+    "quantity_requested",
+    "available_stock",
+    "reason"
+  ],
+  "title": "StockReservationFailed",
+  "type": "object"
+}

@@ -1,0 +1,51 @@
+{{- if and .Values.mesh.enabled .Values.mesh.extra.enabled }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ .Values.name }}-{{ .Values.mesh.extra.variant }}
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "msvc.labels" . | nindent 4 }}
+spec:
+  progressDeadlineSeconds: 420
+  revisionHistoryLimit: 5
+  replicas: {{ .Values.replicaCount }}
+  selector:
+    matchLabels:
+      app: {{ .Values.name }}-{{ .Values.mesh.extra.variant }}
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxUnavailable: 0
+      maxSurge: 1
+  template:
+    metadata:
+      labels:
+        {{- if .Values.mesh.enabled }}
+        sidecar.istio.io/inject: "true"
+        lab10-mesh: "true"
+        lab10-service: {{ .Values.name }}
+        version: {{ .Values.mesh.extra.variant }}
+        service.istio.io/canonical-name: {{ .Values.name }}
+        service.istio.io/canonical-revision: {{ .Values.mesh.extra.variant }}
+        {{- end }}
+        app: {{ .Values.name }}-{{ .Values.mesh.extra.variant }}
+        app.kubernetes.io/name: {{ .Values.name }}
+        app.kubernetes.io/instance: {{ .Release.Name }}
+        app.kubernetes.io/managed-by: {{ .Release.Service }}
+      annotations:
+        {{- if .Values.mesh.enabled }}
+        prometheus.io/scrape: "true"
+        prometheus.io/path: /metrics
+        prometheus.io/port: {{ .Values.port | quote }}
+        proxy.istio.io/config: '{"holdApplicationUntilProxyStarts":true}'
+        sidecar.istio.io/rewriteAppHTTPProbers: "true"
+        sidecar.istio.io/proxyCPU: "100m"
+        sidecar.istio.io/proxyCPULimit: "500m"
+        sidecar.istio.io/proxyMemory: "128Mi"
+        sidecar.istio.io/proxyMemoryLimit: "256Mi"
+        {{- end }}
+        checksum/config: {{ include (print $.Template.BasePath "/configmap.yaml") . | sha256sum }}
+    spec:
+{{ include "msvc.pod" (dict "root" . "extra" true "variant" .Values.mesh.extra.variant "repository" (default .Values.image.repository .Values.mesh.extra.repository) "digest" .Values.mesh.extra.digest) | indent 6 }}
+{{- end }}

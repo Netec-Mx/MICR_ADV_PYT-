@@ -1,0 +1,7 @@
+apiVersion: v2
+name: msvc-chart
+description: Cumulative microservice with Vault identity and Lab 8 observability
+type: application
+version: 1.0.0
+appVersion: "9.0.0"
+kubeVersion: ">=1.30.0-0"

@@ -1,0 +1,23 @@
+services:
+  inventory-mock:
+    build:
+      context: .
+      dockerfile: order-service/Dockerfile
+    command: ["uvicorn", "scripts.mock_inventory_service:app", "--host", "0.0.0.0", "--port", "8003"]
+    ports: ["127.0.0.1:8003:8003"]
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8003/health')"]
+      interval: 2s
+      timeout: 2s
+      retries: 15
+  order-service:
+    environment:
+      INVENTORY_BASE_URL: http://inventory-mock:8003
+      RESILIENCE_NAMESPACE: lab04:orders:chaos:inventory
+      RESILIENCE_FAIL_MAX: "3"
+      RESILIENCE_RESET_TIMEOUT: "3"
+      RESILIENCE_MAX_CONCURRENT: "3"
+      RESILIENCE_HTTP_TIMEOUT: "0.3"
+    depends_on:
+      inventory-mock:
+        condition: service_healthy

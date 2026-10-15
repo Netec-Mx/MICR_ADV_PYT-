@@ -1,0 +1,107 @@
+openapi: 3.0.3
+info:
+  title: Lab07 · Administración Vault
+  version: 7.0.0
+  description: JWT con audiencia del recurso, rol ops:admin y scope ops.admin. Refresh
+    además exige la admin_key vigente. Complementa los contratos de negocio acumulativos.
+paths:
+  /api/v1/orders/config/status:
+    get:
+      tags:
+      - Vault
+      security:
+      - BearerJWT: []
+      responses: &id001
+        '200':
+          description: Estado sin valores secretos
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/VaultStatus'
+        '401':
+          description: JWT ausente o inválido
+        '403':
+          description: Rol/scope insuficiente o clave administrativa inválida
+        '503':
+          description: Vault o configuración no disponibles
+  /api/v1/orders/config/refresh:
+    post:
+      tags:
+      - Vault
+      security:
+      - BearerJWT: []
+        AdminKey: []
+      responses: *id001
+  /api/v1/products/config/status:
+    get:
+      tags:
+      - Vault
+      security:
+      - BearerJWT: []
+      responses: *id001
+  /api/v1/products/config/refresh:
+    post:
+      tags:
+      - Vault
+      security:
+      - BearerJWT: []
+        AdminKey: []
+      responses: *id001
+  /api/v1/users/config/status:
+    get:
+      tags:
+      - Vault
+      security:
+      - BearerJWT: []
+      responses: *id001
+  /api/v1/users/config/refresh:
+    post:
+      tags:
+      - Vault
+      security:
+      - BearerJWT: []
+        AdminKey: []
+      responses: *id001
+components:
+  securitySchemes:
+    BearerJWT:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+    AdminKey:
+      type: apiKey
+      in: header
+      name: X-Admin-Key
+  schemas:
+    VaultStatus:
+      type: object
+      required:
+      - service
+      - version
+      - instance
+      - age_seconds
+      - logins
+      - renewals
+      properties:
+        service:
+          type: string
+          enum:
+          - order-service
+          - inventory-service
+          - users-service
+        version:
+          type: integer
+          minimum: 1
+        instance:
+          type: string
+          format: uuid
+        age_seconds:
+          type: number
+          minimum: 0
+        logins:
+          type: integer
+          minimum: 0
+        renewals:
+          type: integer
+          minimum: 0
+      additionalProperties: false

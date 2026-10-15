@@ -1,1609 +1,342 @@
-# 4 Laboratorio: desplegar Gateway y políticas para servicios Python
+# Laboratorio 6 · API Gateway y políticas para microservicios Python
 
-## Metadata
+**Curso:** Microservicios Avanzado · **Complejidad:** media · **Bloom:** aplicar.
+**Tiempo guiado:** 66 minutos, con herramientas e imágenes preparadas antes de clase.
+**Continuidad:** código acumulativo de los labs 1–5 corregidos. El ZIP contiene la solución completa y el chart Helm fijado.
 
-| Campo | Valor |
-|-------|-------|
-| **Duración** | 66 minutos |
-| **Complejidad** | Media |
-| **Nivel Bloom** | Aplicar |
-| **Tecnologías** | Traefik 3.0.4, FastAPI 0.111.0, Kubernetes IngressRoute CRDs, Helm 3.15.2, Docker 26.1.4, minikube 1.33.1 |
+## Objetivos y resultado esperado
 
-## Visión General
+1. Desplegar Traefik 3 como Ingress Controller en minikube mediante Helm y sus CRDs.
+2. Configurar IngressRoutes hacia tres microservicios FastAPI bajo `microservices.local`.
+3. Aplicar rate limiting diferenciado por servicio.
+4. Aplicar circuit breaker en el edge y distinguirlo del circuito interno de Orders.
+5. Validar rutas y políticas con curl y scripts que fallen cuando no se cumple lo esperado.
 
-En este laboratorio desplegarás Traefik 3.0.4 como API Gateway e Ingress Controller en un clúster minikube, configurarás rutas declarativas mediante IngressRoute CRDs hacia tres microservicios Python FastAPI, e implementarás políticas de rate limiting y circuit breaker en el edge. Este lab establece la infraestructura base del directorio `/home/student/msvc-labs/` que se reutilizará en laboratorios posteriores.
+Se conservan UUID, `/api/v1`, Decimal, JWT, roles/scopes, Client Credentials, EventStore/CQRS, outbox, Kafka, Redis, retries y bulkhead. Orders e Inventory usan el código revisado; no se sustituyen por diccionarios en memoria. **Users es un servicio adicional de demostración**, con datos ficticios de lectura y fallo simulado; Keycloak continúa administrando identidades y autenticación.
 
-## Objetivos de Aprendizaje
-
-- [ ] Desplegar Traefik 3.0.4 como Ingress Controller en minikube usando Helm con CRDs habilitados
-- [ ] Configurar IngressRoute CRDs para enrutar tráfico hacia tres microservicios Python FastAPI bajo el dominio `microservices.local`
-- [ ] Implementar rate limiting diferenciado por servicio usando middlewares declarativos de Traefik
-- [ ] Configurar circuit breaker en el edge para proteger servicios backend ante fallos cascada
-- [ ] Validar las políticas mediante pruebas de carga con curl y scripts Python
-
-## Prerrequisitos
-
-### Conocimiento Previo
-
-- Conceptos de Kubernetes: Deployments, Services, Namespaces
-- Familiaridad con Helm charts y valores de configuración
-- Comprensión del rol del API Gateway y patrones de enrutamiento (proxy inverso)
-- Experiencia básica con FastAPI y Docker
-
-### Acceso y Herramientas
-
-| Herramienta | Versión | Verificación |
-|-------------|---------|--------------|
-| minikube | 1.33.1 | `minikube version` |
-| kubectl | 1.30.2 | `kubectl version --client` |
-| Helm | 3.15.2 | `helm version --short` |
-| Docker Engine | 26.1.4 | `docker --version` |
-| Python | 3.12.3 | `python3 --version` |
-
-## Entorno del Laboratorio
-
-### Requisitos de Hardware
-
-| Recurso | Mínimo | Recomendado |
-|---------|--------|-------------|
-| CPU | 4 núcleos | 8 núcleos |
-| RAM | 16 GB | 32 GB |
-| Disco SSD | 30 GB libres | 50 GB libres |
-| Red | 10 Mbps | 50 Mbps |
-
-### Estructura de Directorios
-
-```
-/home/student/msvc-labs/
-├── services/
-│   ├── orders-service/
-│   ├── inventory-service/
-│   └── users-service/
-├── k8s/
-│   ├── deployments/
-│   ├── services/
-│   └── traefik/
-│       ├── middlewares/
-│       └── ingress-routes/
-├── scripts/
-└── docker/
+```mermaid
+flowchart TD
+  C["Cliente · Host microservices.local + Bearer"] --> G["Traefik · rutas y políticas"]
+  G -->|"100/min · burst 20"| O["Orders · JWT + CQRS"]
+  G -->|"200/min · burst 40"| I["Inventory · JWT"]
+  G -->|"50/min · burst 10"| U["Users demo · JWT"]
+  O -->|"Client Credentials + resiliencia"| I
+  O --> P["PostgreSQL · eventos y outbox"]
+  P -->|"Relay"| K["Kafka · contratos Lab 2"]
+  K --> I
+  I --> R["Redis · stock y reservas"]
 ```
 
-### Configuración Inicial del Entorno
+Keycloak valida usuarios y emite tokens para los tres recursos. Las APIs verifican firma/issuer/audiencia mediante JWKS. El Gateway conserva `Authorization`; no reemplaza los permisos de aplicación.
+
+## Correcciones respecto al original
+
+El archivo original estaba rotulado como laboratorio 4; aquí se identifica como **laboratorio 6**. Se corrigen contexto de build, versiones del chart, paths, exposición del dashboard, comprobaciones de readiness y falsos positivos de los scripts. `checkPeriod` es la frecuencia de evaluación del circuito, **no una ventana de errores de diez segundos**. El rate limiter usa token bucket; 50/min describe la reposición, no un contador fijo que admite 50 solicitudes instantáneas.
+
+El chart original **28.3.0 declara appVersion v3.0.2**, aunque el texto afirmaba que incluía 3.0.4. Esta revisión fija **chart 41.7.0 / Traefik 3.7.14**, con valores contrastados con su schema y renderizados. El chart se incluye en `vendor/`; instalarlo no necesita buscar una versión distinta en el repositorio.
+
+## 0. Preparación previa del instructor
+
+Usa Ubuntu con Docker funcionando para el usuario actual. Entorno objetivo: minikube **1.39.0**, Kubernetes **1.35.8**, kubectl de la rama **1.35**, Helm **3.20.1** y Python **3.12**. Los manifests usan APIs estables y `traefik.io/v1alpha1`.
+
+Reserva al menos **6 CPU, 10 GiB para minikube y 40 GB de disco**; se recomienda un host/VM de 16 GiB. Se despliegan las dependencias reales del curso además de las tres APIs. Descargar imágenes y compilar por primera vez puede exceder el tiempo guiado.
+
+Extrae el ZIP. Desde `microservices-lab`:
 
 ```bash
-# Crear estructura de directorios
-mkdir -p /home/student/msvc-labs/{services/{orders-service,inventory-service,users-service},k8s/{deployments,services,traefik/{middlewares,ingress-routes}},scripts,docker}
-cd /home/student/msvc-labs
+python3.12 -m venv .venv312
+source .venv312/bin/activate
+python -m pip install -r order-service/requirements-dev.txt
+python -m pip check
+python scripts/preflight.py --auth
+minikube version
+kubectl version --client
+helm version --short
+docker info
 ```
 
----
+No requiere el Python launcher `py`. En Windows, ejecuta la práctica en una VM Ubuntu; los comandos de este capítulo son Bash. No ejecutes los scripts Bash directamente en PowerShell.
 
-## Paso 1: Iniciar clúster minikube y verificar estado
+Versiones acumulativas: PostgreSQL 16.3, Redis 7.2.5, Kafka/Zookeeper Confluent 7.6.1, Keycloak 26.8.0, FastAPI 0.111.0, Pydantic 2.7.1, PyJWT 2.15.1 y cryptography 50.0.2. La migración de plataforma no cambia las versiones de las dependencias de negocio.
 
-### Objetivo
+Este laboratorio crea **otra instancia de datos en PVCs de Kubernetes**. Continúa el código y los contratos, pero no importa automáticamente los volúmenes ni los pedidos del Lab 5 en Compose. Conserva aquella instancia. Si Compose ocupa :8080, detén sus servicios con la función `dc stop` del Lab 5; no uses `down -v`.
 
-Arrancar un clúster minikube con recursos suficientes para ejecutar Traefik y tres microservicios, deshabilitando el addon de ingress por defecto para evitar conflictos.
+## 1. Clúster y despliegue ordenado · 14 minutos
 
-### Instrucciones
-
-1. Detener cualquier clúster minikube existente y crear uno nuevo con recursos adecuados:
-
-```bash
-minikube delete --all 2>/dev/null
-minikube start \
-  --driver=docker \
-  --cpus=4 \
-  --memory=8192 \
-  --disk-size=30g \
-  --kubernetes-version=v1.30.2 \
-  --addons=metrics-server \
-  --profile=msvc-gateway
-```
-
-2. Verificar que el clúster está operativo:
+Desde la raíz del proyecto:
 
 ```bash
-kubectl cluster-info
-kubectl get nodes -o wide
+export PROFILE=msvc-gateway
+export KUBE_CONTEXT=msvc-gateway
+minikube start -p "$PROFILE" --driver=docker --cpus=6 --memory=10240 --disk-size=40g --kubernetes-version=v1.35.8
+minikube addons disable ingress -p "$PROFILE"
+k() { kubectl --context "$KUBE_CONTEXT" "$@"; }
+k get nodes -o wide
+bash scripts/lab06/deploy.sh
 ```
 
-3. Deshabilitar el addon de ingress por defecto (si estuviera habilitado):
+No actives el addon Traefik de minikube: en esta práctica se instala el chart fijado.
 
-```bash
-minikube addons disable ingress --profile=msvc-gateway 2>/dev/null || true
-```
+`deploy.sh` usa contexto y perfil explícitos, termina ante errores y ejecuta estas etapas:
 
-4. Crear los namespaces necesarios:
+1. Genera el realm y su ConfigMap; construye las tres imágenes en minikube desde el contexto raíz correcto.
+2. Crea namespaces, secretos de práctica, configuración de inicialización y los dos PostgreSQL.
+3. Espera readiness de bases, Redis, Zookeeper y Kafka; crea los cuatro topics del curso con tres particiones.
+4. Despliega Keycloak y espera readiness en su puerto management :9000.
+5. Ejecuta `eventstore-migrate` con la conexión administrativa; Orders utilizará después el rol restringido `order_app`.
+6. Despliega las tres APIs y espera rollout; aplica los CRDs del chart con server-side apply e instala/actualiza Traefik mediante `helm upgrade --install` y aplica sus middlewares y rutas.
 
-```bash
-kubectl create namespace microservices
-kubectl create namespace traefik
-```
+Helm no actualiza automáticamente CRDs durante un upgrade. El script los aplica explícitamente desde el chart fijado antes de instalar/actualizar el release. No mezcla CRDs descargados de otra versión.
 
-### Salida Esperada
+El Job completado se recrea de forma acotada cuando repites el script; `alembic upgrade head` no borra datos. No recrea PVCs. Las credenciales de práctica están en `k8s/lab06/01-secrets.yaml`, y el realm conserva los valores conocidos del Lab 5.
 
-```
-😄  [msvc-gateway] minikube v1.33.1 on Ubuntu 22.04
-✨  Using the docker driver based on user configuration
-...
-🏄  Done! kubectl is now configured to use "msvc-gateway" cluster
-```
-
-```
-Kubernetes control plane is running at https://192.168.49.2:8443
-namespace/microservices created
-namespace/traefik created
-```
-
-### Verificación
+Comprueba:
 
 ```bash
-kubectl get namespaces | grep -E "microservices|traefik"
+k -n microservices get deployments,statefulsets,services,pvc
+k -n microservices logs job/eventstore-migrate
+k -n traefik get deployment,service
+k get crd ingressroutes.traefik.io middlewares.traefik.io
 ```
 
-Debe mostrar ambos namespaces en estado `Active`.
+No basta con contar pods `Running`; un pod puede no estar Ready y el Job tiene un pod `Completed`. El validador usa rollout por componente.
 
----
+## 2. Acceso estable y seguridad · 8 minutos
 
-## Paso 2: Construir e importar las imágenes de los microservicios
-
-### Objetivo
-
-Crear tres microservicios Python FastAPI simples (orders, inventory, users), construir sus imágenes Docker e importarlas al registro interno de minikube.
-
-### Instrucciones
-
-1. Crear el archivo `requirements.txt` compartido:
+Traefik usa **ClusterIP**. Abre dos terminales y deja los procesos activos:
 
 ```bash
-cat > /home/student/msvc-labs/docker/requirements.txt << 'EOF'
-fastapi==0.111.0
-uvicorn==0.29.0
-pydantic==2.7.1
-EOF
+# Terminal A: emisor público fijo del Lab 5
+kubectl --context msvc-gateway -n microservices port-forward --address 127.0.0.1 service/keycloak 8080:8080
 ```
-
-2. Crear el código del **orders-service**:
 
 ```bash
-cat > /home/student/msvc-labs/services/orders-service/main.py << 'EOF'
-from fastapi import FastAPI, HTTPException
-from pydantic import BaseModel
-from datetime import datetime
-import os
-
-app = FastAPI(title="Orders Service", version="1.0.0")
-
-class Order(BaseModel):
-    id: int
-    product: str
-    quantity: int
-    status: str
-    created_at: str
-
-ORDERS_DB = {
-    1: Order(id=1, product="Laptop Pro", quantity=1, status="confirmed", created_at="2024-06-01T10:00:00Z"),
-    2: Order(id=2, product="Mouse Wireless", quantity=3, status="pending", created_at="2024-06-01T11:30:00Z"),
-    3: Order(id=3, product="Monitor 27\"", quantity=1, status="shipped", created_at="2024-06-02T09:15:00Z"),
-}
-
-@app.get("/health")
-async def health():
-    return {"status": "healthy", "service": "orders-service", "version": "1.0.0"}
-
-@app.get("/api/v1/orders")
-async def list_orders():
-    return {"orders": list(ORDERS_DB.values()), "total": len(ORDERS_DB)}
-
-@app.get("/api/v1/orders/{order_id}")
-async def get_order(order_id: int):
-    if order_id not in ORDERS_DB:
-        raise HTTPException(status_code=404, detail=f"Order {order_id} not found")
-    return ORDERS_DB[order_id]
-
-@app.get("/api/v1/orders/fail/simulate")
-async def simulate_failure():
-    """Endpoint para simular fallos y probar circuit breaker."""
-    raise HTTPException(status_code=500, detail="Simulated internal error")
-EOF
+# Terminal B: entrada del Gateway
+kubectl --context msvc-gateway -n traefik port-forward --address 127.0.0.1 service/traefik 18080:80
 ```
 
-3. Crear el código del **inventory-service**:
+Todas las pruebas siguientes se ejecutan en la misma máquina/VM Ubuntu donde corren esos port-forward. No dependen de `/etc/hosts`, NodePort ni de que la IP de minikube sea accesible desde Windows.
 
 ```bash
-cat > /home/student/msvc-labs/services/inventory-service/main.py << 'EOF'
-from fastapi import FastAPI, HTTPException
-from pydantic import BaseModel
-
-app = FastAPI(title="Inventory Service", version="1.0.0")
-
-class InventoryItem(BaseModel):
-    sku: str
-    name: str
-    quantity: int
-    warehouse: str
-
-INVENTORY_DB = {
-    "SKU-001": InventoryItem(sku="SKU-001", name="Laptop Pro", quantity=42, warehouse="Madrid"),
-    "SKU-002": InventoryItem(sku="SKU-002", name="Mouse Wireless", quantity=150, warehouse="Barcelona"),
-    "SKU-003": InventoryItem(sku="SKU-003", name="Monitor 27\"", quantity=28, warehouse="Madrid"),
-}
-
-@app.get("/health")
-async def health():
-    return {"status": "healthy", "service": "inventory-service", "version": "1.0.0"}
-
-@app.get("/api/v1/inventory")
-async def list_inventory():
-    return {"items": list(INVENTORY_DB.values()), "total": len(INVENTORY_DB)}
-
-@app.get("/api/v1/inventory/{sku}")
-async def get_item(sku: str):
-    if sku not in INVENTORY_DB:
-        raise HTTPException(status_code=404, detail=f"SKU {sku} not found")
-    return INVENTORY_DB[sku]
-EOF
+export GATEWAY_URL=http://localhost:18080
+export GATEWAY_HOST=microservices.local
+export AUTH_ISSUER=http://localhost:8080/realms/microservices-lab
 ```
 
-4. Crear el código del **users-service**:
+La consola de Keycloak está en <http://localhost:8080>: `admin` / `admin_lab_pass`. Usuarios de práctica: `admin-user` / `Admin-Lab05!` y `readonly-user` / `Read-Lab05!`.
 
-```bash
-cat > /home/student/msvc-labs/services/users-service/main.py << 'EOF'
-from fastapi import FastAPI, HTTPException
-from pydantic import BaseModel
+Las APIs usan el issuer público fijo `http://localhost:8080/realms/microservices-lab` y JWKS interno `http://keycloak:8080/.../certs`. Orders obtiene tokens en la dirección interna de Keycloak y consulta `http://inventory-service:8002`. Cambiar el Host del Gateway no cambia el issuer.
 
-app = FastAPI(title="Users Service", version="1.0.0")
+Se añade audiencia **users-api**, rol **user:read** y scope **users.read**, asignados a operadores/readonly de práctica. Los permisos anteriores se conservan; `order-service-client` continúa con sólo `inventory.read`. El realm se importa únicamente cuando no existe: regenerar el ConfigMap y reiniciar Keycloak **no sobrescribe un realm previo**. Si actualizas una configuración vieja en esta instancia, ajusta los scopes/roles en la consola o elimina sólo el realm de práctica y vuelve a importarlo; no borres volúmenes de negocio.
 
-class User(BaseModel):
-    id: int
-    username: str
-    email: str
-    role: str
+Para una identidad humana puedes usar el helper PKCE del Lab 5 con `--scope "orders.read inventory.read users.read"`. Requiere que el navegador y su callback :8765 sean accesibles en la misma máquina que Keycloak. Las pruebas de este capítulo usan Client Credentials de operador/lector y no password grant.
 
-USERS_DB = {
-    1: User(id=1, username="admin-user", email="admin@example.com", role="admin"),
-    2: User(id=2, username="readonly-user", email="reader@example.com", role="viewer"),
-}
+## 3. Rutas y middlewares · 10 minutos
 
-@app.get("/health")
-async def health():
-    return {"status": "healthy", "service": "users-service", "version": "1.0.0"}
+Revisa `k8s/traefik/values.yaml`, `middlewares.yaml` y `routes.yaml`.
 
-@app.get("/api/v1/users")
-async def list_users():
-    return {"users": list(USERS_DB.values()), "total": len(USERS_DB)}
+| Ruta del Gateway | Backend | Permiso conservado |
+|---|---|---|
+| `/api/v1/orders` y sus subrutas | `order-service:8001` | Rol + scope Orders |
+| `/api/v1/products` y sus subrutas | `inventory-service:8002` | Rol + scope Inventory |
+| `/api/v1/reservations` y sus subrutas | `inventory-service:8002` | Escritura Inventory |
+| `/api/v1/users` y sus subrutas | `users-service:8003` | `user:read` + `users.read` |
 
-@app.get("/api/v1/users/{user_id}")
-async def get_user(user_id: int):
-    if user_id not in USERS_DB:
-        raise HTTPException(status_code=404, detail=f"User {user_id} not found")
-    return USERS_DB[user_id]
-EOF
+No se inventa `/api/v1/inventory`, que no existe en el contrato corregido. Cada regla combina `Host`, `Path` exacto y `PathPrefix` terminado en `/`; `/api/v1/orders-evil` no coincide. No se elimina `/api/v1` ni se aplica StripPrefix.
+
+Ejemplo real:
+
+```yaml
+match: Host(`microservices.local`) && (Path(`/api/v1/orders`) || PathPrefix(`/api/v1/orders/`))
 ```
 
-5. Crear el **Dockerfile** compartido:
+Las rutas, servicios y middlewares están en **microservices**. El controlador puede estar en **traefik** y observar microservices mediante su provider/RBAC. `allowCrossNamespace=false` no impide eso: regula referencias de una ruta a recursos de otro namespace. No es necesario habilitarlo para estas rutas.
+
+| Política | Reposición | Capacidad del bucket |
+|---|---|---|
+| Orders | 100 tokens/min | 20 |
+| Inventory | 200 tokens/min | 40 |
+| Users | 50 tokens/min | 10 |
+
+Cada servicio tiene middleware propio. `sourceCriterion.requestHost=true` agrupa todas las peticiones de ese router bajo `microservices.local`: cuota agregada y reproducible de práctica, **no por usuario JWT**. No se usa el Bearer completo como clave del limiter. Hay una réplica de Traefik; estos buckets y circuitos viven en memoria del proceso y no constituyen una cuota distribuida.
+
+Orden: **rate limiter → circuit breaker → backend**. Un 429 se genera antes del backend y no debe confundirse con 503 de circuito abierto. Peticiones sin JWT también consumen cuota antes de recibir 401 de la API.
+
+Circuitos normales: expresión `ResponseCodeRatio(500, 600, 0, 600) > 0.50`, `checkPeriod=100ms`, `fallbackDuration=15s` y `recoveryDuration=30s`. Son circuitos de edge por router. El circuito Redis de Orders → Inventory del Lab 4 es otro mecanismo, con otro estado y otra finalidad. El edge no sustituye reintentos/bulkhead de Orders ni garantiza entrega por Kafka.
+
+El dashboard de Traefik está **deshabilitado** y su API administrativa **no se publica**; no se habilita `api.insecure`. No se publican `/health`, `/docs`, `/openapi.json`, `/admin` ni diagnósticos de Orders mediante estas IngressRoutes. Para diagnóstico de readiness se usa Kubernetes; para comprobar una API directamente usa un port-forward temporal y sigue enviando Bearer donde corresponda.
+
+## 4. Curl y prueba funcional · 10 minutos
+
+Obtén un token de lector; no lo imprimas:
 
 ```bash
-cat > /home/student/msvc-labs/docker/Dockerfile << 'EOF'
-FROM python:3.12.3-slim
-
-WORKDIR /app
-
-COPY requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
-
-COPY main.py .
-
-EXPOSE 8000
-
-CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000"]
-EOF
+TOKEN_URL="$AUTH_ISSUER/protocol/openid-connect/token"
+READ=$(curl -fsS -X POST "$TOKEN_URL" -d 'grant_type=client_credentials' -d 'client_id=readonly-client' -d 'client_secret=readonly-secret' --data-urlencode 'scope=orders.read inventory.read users.read' | python -c 'import sys,json; print(json.load(sys.stdin)["access_token"])')
+curl -i -H "Host: $GATEWAY_HOST" -H "Authorization: Bearer $READ" "$GATEWAY_URL/api/v1/orders"
+curl -i -H "Host: $GATEWAY_HOST" -H "Authorization: Bearer $READ" "$GATEWAY_URL/api/v1/products"
+curl -i -H "Host: $GATEWAY_HOST" -H "Authorization: Bearer $READ" "$GATEWAY_URL/api/v1/users"
+curl -i -H "Host: $GATEWAY_HOST" "$GATEWAY_URL/api/v1/orders"
+curl -i -H 'Host: wrong.local' "$GATEWAY_URL/api/v1/orders"
+curl -i -H "Host: $GATEWAY_HOST" "$GATEWAY_URL/dashboard/"
+curl -i -X POST -H "Host: $GATEWAY_HOST" -H "Authorization: Bearer $READ" -H 'Content-Type: application/json' --data '{}' "$GATEWAY_URL/api/v1/orders"
 ```
 
-6. Configurar Docker para usar el daemon de minikube y construir las imágenes:
+Resultados: tres lecturas 200; sin JWT 401; Host incorrecto 404; dashboard 404; escritura readonly 403. Un token sólo con audiencia users-api recibe 401 en Orders. Los tokens normales duran 300 segundos: vuelve a obtenerlos si expiran.
+
+Ejecuta:
 
 ```bash
-eval $(minikube docker-env --profile=msvc-gateway)
-
-# Construir orders-service
-docker build \
-  -f /home/student/msvc-labs/docker/Dockerfile \
-  --build-context requirements=/home/student/msvc-labs/docker \
-  -t orders-service:1.0.0 \
-  /home/student/msvc-labs/services/orders-service/
-
-# Construir inventory-service
-docker build \
-  -f /home/student/msvc-labs/docker/Dockerfile \
-  -t inventory-service:1.0.0 \
-  /home/student/msvc-labs/services/inventory-service/
-
-# Construir users-service
-docker build \
-  -f /home/student/msvc-labs/docker/Dockerfile \
-  -t users-service:1.0.0 \
-  /home/student/msvc-labs/services/users-service/
+python scripts/lab06/validate_gateway.py
 ```
 
-> **Nota:** Como el Dockerfile referencia `requirements.txt` en el mismo directorio, copie el archivo de requisitos junto al `main.py` de cada servicio antes de construir:
+El validador obtiene tokens de operador/lector, comprueba las tres rutas, 401/403, audiencia incorrecta, aislamiento de prefijos y ausencia de dashboard. Después crea producto/pedido vía Gateway, exige `X-Stock-Precheck: verified` y verifica que Kafka/Redis reduzca stock de **20 a 18**. El pedido conserva `pending` y `total="20.00"`. No valida únicamente códigos HTTP; comprueba comportamiento de negocio.
+
+## 5. Rate limiting sin falsos positivos · 10 minutos
 
 ```bash
-cp /home/student/msvc-labs/docker/requirements.txt /home/student/msvc-labs/services/orders-service/
-cp /home/student/msvc-labs/docker/requirements.txt /home/student/msvc-labs/services/inventory-service/
-cp /home/student/msvc-labs/docker/requirements.txt /home/student/msvc-labs/services/users-service/
-
-# Reconstruir con contexto correcto
-docker build -f /home/student/msvc-labs/docker/Dockerfile -t orders-service:1.0.0 /home/student/msvc-labs/services/orders-service/
-docker build -f /home/student/msvc-labs/docker/Dockerfile -t inventory-service:1.0.0 /home/student/msvc-labs/services/inventory-service/
-docker build -f /home/student/msvc-labs/docker/Dockerfile -t users-service:1.0.0 /home/student/msvc-labs/services/users-service/
+python scripts/lab06/test_ratelimit.py
 ```
 
-### Salida Esperada
+El script envía 80 lecturas de Users con concurrencia acotada y exige:
 
-```
-Successfully built <hash>
-Successfully tagged orders-service:1.0.0
-Successfully built <hash>
-Successfully tagged inventory-service:1.0.0
-Successfully built <hash>
-Successfully tagged users-service:1.0.0
-```
+- Al menos un 200 y un 429, sin 401/403/500 ni errores de conexión.
+- Inventory sigue respondiendo 200: buckets separados.
+- Después de dos segundos, una lectura Users vuelve a ser admitida: reposición.
 
-### Verificación
+No espera un resultado ficticio de 58 éxitos y 22 rechazos. Con bucket inicialmente lleno, la ráfaga inicial admite aproximadamente 10 y después repone **50/60 ≈ 0.83 por segundo**; tiempos y tráfico previo cambian el número observado. Si repites la prueba inmediatamente, espera **12 segundos** para reponer los diez tokens del bucket de Users antes de volver a ejecutarla.
+
+Puedes observar el rate limiter con curl, pero el script da una comprobación completa y devuelve código distinto de cero ante incumplimientos. Un 429 puede aparecer antes de la autenticación si ya agotaste la cuota; espera reposición antes de diagnosticar JWT.
+
+## 6. Circuit breaker con prueba aislada · 14 minutos
+
+Para no introducir fallos en Orders ni ocultarlos detrás del rate limiter de Users, activa el router de chaos **sólo durante esta prueba**:
 
 ```bash
-docker images | grep -E "orders-service|inventory-service|users-service"
+k apply -f k8s/traefik/chaos-route.yaml
+python scripts/lab06/test_circuitbreaker.py
 ```
 
-Debe mostrar las tres imágenes con tag `1.0.0`.
+El router tiene prioridad **100**, frente a **20** de las rutas normales, y coincide únicamente con `/api/v1/users/fail/simulate`. Usa un circuito independiente `circuitbreaker-chaos` con `fallbackDuration=3s` y `recoveryDuration=2s`; no usa rate limiting. La API sigue exigiendo JWT, `user:read` y `users.read`.
 
----
-
-## Paso 3: Desplegar los microservicios en Kubernetes
-
-### Objetivo
-
-Crear los Deployments y Services ClusterIP para los tres microservicios en el namespace `microservices`.
-
-### Instrucciones
-
-1. Crear el manifiesto de Deployment y Service para **orders-service**:
-
-```bash
-cat > /home/student/msvc-labs/k8s/deployments/orders-service.yaml << 'EOF'
-apiVersion: apps/v1
-kind: Deployment
-metadata:
-  name: orders-service
-  namespace: microservices
-  labels:
-    app: orders-service
-    version: "1.0.0"
-spec:
-  replicas: 2
-  selector:
-    matchLabels:
-      app: orders-service
-  template:
-    metadata:
-      labels:
-        app: orders-service
-        version: "1.0.0"
-    spec:
-      containers:
-      - name: orders-service
-        image: orders-service:1.0.0
-        imagePullPolicy: Never
-        ports:
-        - containerPort: 8000
-          name: http
-        livenessProbe:
-          httpGet:
-            path: /health
-            port: 8000
-          initialDelaySeconds: 5
-          periodSeconds: 10
-        readinessProbe:
-          httpGet:
-            path: /health
-            port: 8000
-          initialDelaySeconds: 3
-          periodSeconds: 5
-        resources:
-          requests:
-            memory: "128Mi"
-            cpu: "100m"
-          limits:
-            memory: "256Mi"
-            cpu: "250m"
-EOF
+```mermaid
+stateDiagram-v2
+  [*] --> Cerrado
+  Cerrado --> Abierto: ratio 5xx mayor a 0.50
+  Abierto --> Recuperando: termina fallbackDuration
+  Recuperando --> Cerrado: recuperación saludable
+  Recuperando --> Abierto: vuelve a fallar
 ```
 
-2. Crear el Service para **orders-service**:
+El endpoint acepta `?fail=true` para devolver 500 y `?fail=false` para devolver 200; sus respuestas llevan `X-Lab-Backend: users-service`. El 503 generado por el edge no lleva ese marcador.
+
+La prueba exige **todas** estas evidencias:
+
+1. Un 500 proviene efectivamente del backend.
+2. Aparece un 503 sin marcador del backend.
+3. Una petición que el backend respondería 200 también queda bloqueada por el circuito abierto.
+4. Inventory sigue respondiendo 200 mediante su propio router.
+5. Al dejar de simular fallos, se observan cinco respuestas 200 consecutivas tras la recuperación.
+
+401, 403, 429, timeout o router ausente **no cuentan como apertura**. Si falta una fase, el script termina con error. `checkPeriod` determina cuándo evalúa la expresión; no se afirma una ventana fija de diez segundos ni un mínimo fijo de 30 fallos.
+
+Retira el router de prueba al terminar:
 
 ```bash
-cat > /home/student/msvc-labs/k8s/services/orders-service.yaml << 'EOF'
-apiVersion: v1
-kind: Service
-metadata:
-  name: orders-service
-  namespace: microservices
-  labels:
-    app: orders-service
-spec:
-  type: ClusterIP
-  selector:
-    app: orders-service
-  ports:
-  - port: 8000
-    targetPort: 8000
-    protocol: TCP
-    name: http
-EOF
+k delete -f k8s/traefik/chaos-route.yaml --ignore-not-found
 ```
 
-3. Crear Deployment y Service para **inventory-service**:
+El endpoint simulado sigue en el servicio de demostración; sin el router específico queda sujeto a las políticas normales de Users. No uses ese endpoint en ejercicios de negocio ni lo presentes como funcionalidad de producción.
+
+## Validación completa y pruebas de regresión
+
+Con los port-forward activos y el entorno Python activado:
 
 ```bash
-cat > /home/student/msvc-labs/k8s/deployments/inventory-service.yaml << 'EOF'
-apiVersion: apps/v1
-kind: Deployment
-metadata:
-  name: inventory-service
-  namespace: microservices
-  labels:
-    app: inventory-service
-    version: "1.0.0"
-spec:
-  replicas: 2
-  selector:
-    matchLabels:
-      app: inventory-service
-  template:
-    metadata:
-      labels:
-        app: inventory-service
-        version: "1.0.0"
-    spec:
-      containers:
-      - name: inventory-service
-        image: inventory-service:1.0.0
-        imagePullPolicy: Never
-        ports:
-        - containerPort: 8000
-          name: http
-        livenessProbe:
-          httpGet:
-            path: /health
-            port: 8000
-          initialDelaySeconds: 5
-          periodSeconds: 10
-        readinessProbe:
-          httpGet:
-            path: /health
-            port: 8000
-          initialDelaySeconds: 3
-          periodSeconds: 5
-        resources:
-          requests:
-            memory: "128Mi"
-            cpu: "100m"
-          limits:
-            memory: "256Mi"
-            cpu: "250m"
-EOF
-
-cat > /home/student/msvc-labs/k8s/services/inventory-service.yaml << 'EOF'
-apiVersion: v1
-kind: Service
-metadata:
-  name: inventory-service
-  namespace: microservices
-  labels:
-    app: inventory-service
-spec:
-  type: ClusterIP
-  selector:
-    app: inventory-service
-  ports:
-  - port: 8000
-    targetPort: 8000
-    protocol: TCP
-    name: http
-EOF
+bash scripts/lab06/validate_all.sh
 ```
 
-4. Crear Deployment y Service para **users-service**:
+Comprueba rollout de todos los componentes, flujo completo de negocio, rate limiting y circuito aislado. Aplica el router de chaos para la última prueba; retíralo después con el comando anterior. No cambia recursos de otro contexto, no cuenta pods de forma rígida y no continúa tras fallos.
+
+Para las suites de regresión, abre port-forward adicionales:
 
 ```bash
-cat > /home/student/msvc-labs/k8s/deployments/users-service.yaml << 'EOF'
-apiVersion: apps/v1
-kind: Deployment
-metadata:
-  name: users-service
-  namespace: microservices
-  labels:
-    app: users-service
-    version: "1.0.0"
-spec:
-  replicas: 2
-  selector:
-    matchLabels:
-      app: users-service
-  template:
-    metadata:
-      labels:
-        app: users-service
-        version: "1.0.0"
-    spec:
-      containers:
-      - name: users-service
-        image: users-service:1.0.0
-        imagePullPolicy: Never
-        ports:
-        - containerPort: 8000
-          name: http
-        livenessProbe:
-          httpGet:
-            path: /health
-            port: 8000
-          initialDelaySeconds: 5
-          periodSeconds: 10
-        readinessProbe:
-          httpGet:
-            path: /health
-            port: 8000
-          initialDelaySeconds: 3
-          periodSeconds: 5
-        resources:
-          requests:
-            memory: "128Mi"
-            cpu: "100m"
-          limits:
-            memory: "256Mi"
-            cpu: "250m"
-EOF
-
-cat > /home/student/msvc-labs/k8s/services/users-service.yaml << 'EOF'
-apiVersion: v1
-kind: Service
-metadata:
-  name: users-service
-  namespace: microservices
-  labels:
-    app: users-service
-spec:
-  type: ClusterIP
-  selector:
-    app: users-service
-  ports:
-  - port: 8000
-    targetPort: 8000
-    protocol: TCP
-    name: http
-EOF
+# Cada comando en una terminal separada
+k -n microservices port-forward --address 127.0.0.1 service/postgres 5432:5432
+k -n microservices port-forward --address 127.0.0.1 service/redis 6379:6379
 ```
-
-5. Aplicar todos los manifiestos:
 
 ```bash
-kubectl apply -f /home/student/msvc-labs/k8s/deployments/
-kubectl apply -f /home/student/msvc-labs/k8s/services/
+export POSTGRES_TEST_ADMIN_URL='postgresql+asyncpg://lab_admin:lab_admin_lab_pass@localhost:5432/eventstore_db'
+export REDIS_TEST_URL='redis://localhost:6379/15'
+export KEYCLOAK_TEST_ISSUER="$AUTH_ISSUER"
+(cd order-service && python -m pytest tests -q)
+(cd inventory-service && python -m pytest tests -q)
+(cd users-service && python -m pytest tests -q)
 ```
 
-6. Esperar a que todos los pods estén en estado Ready:
+Los fixtures crean/eliminan únicamente sus bases y claves temporales. Sin variables de integración se omiten pruebas de PostgreSQL, Redis o Keycloak; un resultado con skips no valida esos componentes. Los contratos legacy sólo sirven a las factories históricas sin auth; las pruebas de JWT y rutas protegidas son independientes.
+
+Para verificar Helm sin desplegar:
 
 ```bash
-kubectl wait --for=condition=ready pod -l app=orders-service -n microservices --timeout=120s
-kubectl wait --for=condition=ready pod -l app=inventory-service -n microservices --timeout=120s
-kubectl wait --for=condition=ready pod -l app=users-service -n microservices --timeout=120s
+helm lint vendor/traefik-41.7.0.tgz -f k8s/traefik/values.yaml --kube-version 1.35.8
+helm template traefik vendor/traefik-41.7.0.tgz -n traefik --kube-version 1.35.8 --include-crds -f k8s/traefik/values.yaml > /tmp/lab06-traefik-rendered.yaml
 ```
 
-### Salida Esperada
+Renderizar Helm o validar YAML no demuestra readiness ni que las políticas se hayan ejecutado. `docs/informe-revision-lab06.md` distingue las verificaciones realizadas de las pendientes en Kubernetes.
 
-```
-deployment.apps/orders-service created
-deployment.apps/inventory-service created
-deployment.apps/users-service created
-service/orders-service created
-service/inventory-service created
-service/users-service created
-pod/orders-service-xxxxx condition met
-pod/inventory-service-xxxxx condition met
-pod/users-service-xxxxx condition met
-```
+## Diagnóstico
 
-### Verificación
+| Síntoma | Comprobación concreta |
+|---|---|
+| 404 del Gateway | Host exacto, path correcto, CRDs establecidos, IngressRoute/middlewares y logs de Traefik |
+| 401 | Token renovado, audience del servicio, issuer fijo, rol/scope y reloj; 401 no es circuito abierto |
+| 403 | Rol y scope conjuntamente; obtener token nuevo después de modificar permisos |
+| 429 durante pruebas JWT | Esperar reposición del bucket; no desactivar JWT |
+| 503 en Gateway | Logs access: `OriginStatus` y `DownstreamStatus`; circuito edge frente a backend no Ready/error interno |
+| 503 de autenticación en Orders | Secreto/scopes de order-service-client y acceso a Keycloak; no convertirlo en fallback |
+| Stock no baja | Topics, consumer Inventory, relay outbox y Redis; no marcar la prueba como aprobada sólo por 201 |
+| ImagePullBackOff | Imagen `:lab06` construida en el perfil correcto; `minikube -p "$PROFILE" image ls` |
+| Keycloak no Ready | PostgreSQL propio, import y health :9000; logs de ambos componentes |
+| Job migration falla | `k -n microservices logs job/eventstore-migrate`; conexión administrativa y rol order_app |
+| Helm nombre en uso | Usar `upgrade --install` con el mismo release, namespace y chart fijado |
 
 ```bash
-kubectl get pods -n microservices -o wide
-kubectl get svc -n microservices
+k -n traefik logs deployment/traefik --tail=50
+k -n microservices get ingressroutes,middlewares
+k -n microservices get endpointslices
+k -n microservices logs deployment/order-service --tail=50
+k -n microservices logs deployment/inventory-service --tail=50
+k -n microservices logs deployment/keycloak --tail=50
 ```
 
-Debe mostrar 6 pods (2 por servicio) en estado `Running` y 3 servicios ClusterIP.
+Los access logs de Traefik omiten headers, incluido Authorization. No publiques archivos de token. La práctica conserva HTTP/local y credenciales didácticas del curso; no añade TLS, alta disponibilidad, cuotas distribuidas ni autenticación del broker en este capítulo.
 
----
+## Cierre y continuidad
 
-## Paso 4: Instalar Traefik 3.0.4 con Helm
-
-### Objetivo
-
-Desplegar Traefik como Ingress Controller en el namespace `traefik` usando Helm, habilitando CRDs de IngressRoute y el dashboard en puerto 9000.
-
-### Instrucciones
-
-1. Agregar el repositorio de Helm de Traefik:
+Cierra únicamente los procesos port-forward de tus terminales. Para pausar conservando PVCs e imágenes:
 
 ```bash
-helm repo add traefik https://traefik.github.io/charts
-helm repo update
+minikube stop -p "$PROFILE"
 ```
 
-2. Crear el archivo de valores personalizados para Traefik:
+Al continuar, inicia el mismo perfil y abre de nuevo los port-forward. Las imágenes :lab06 y datos permanecen. No elimines el clúster, namespaces ni PVCs si continuarás con el laboratorio 7. No se modifica `/etc/hosts`, así que no hay entradas que limpiar.
 
-```bash
-cat > /home/student/msvc-labs/k8s/traefik/values.yaml << 'EOF'
-image:
-  tag: "3.0.4"
+## Entregables del alumno
 
-deployment:
-  replicas: 1
+- Valores Helm y rutas/middlewares revisados.
+- Evidencia de lectura autenticada, 401/403 y pedido con reserva asíncrona.
+- Conteos 200/429 de la ráfaga y prueba de reposición/aislamiento.
+- Evidencia de 500 backend → 503 edge → recuperación 200.
+- Explicación de por qué `checkPeriod` no es una ventana de errores y por qué el circuito de edge difiere del circuito interno de Orders.
 
-ingressRoute:
-  dashboard:
-    enabled: true
+## Referencias oficiales
 
-ports:
-  web:
-    port: 8000
-    expose:
-      default: true
-    exposedPort: 80
-    protocol: TCP
-  websecure:
-    port: 8443
-    expose:
-      default: true
-    exposedPort: 443
-    protocol: TCP
-  traefik:
-    port: 9000
-    expose:
-      default: true
-    exposedPort: 9000
-    protocol: TCP
+- [Chart Traefik 41.7.0](https://github.com/traefik/traefik-helm-chart/releases/tag/v41.7.0) y [Traefik 3.7.14](https://github.com/traefik/traefik/releases/tag/v3.7.14).
+- [RateLimit](https://doc.traefik.io/traefik/reference/routing-configuration/http/middlewares/ratelimit/) y [CircuitBreaker](https://doc.traefik.io/traefik/reference/routing-configuration/http/middlewares/circuitbreaker/).
+- [Minikube: construcción de imágenes](https://minikube.sigs.k8s.io/docs/handbook/pushing/) y [kubectl port-forward](https://kubernetes.io/docs/reference/kubectl/generated/kubectl_port-forward/).
 
-service:
-  type: NodePort
+## Estado de la revisión
 
-providers:
-  kubernetesCRD:
-    enabled: true
-    allowCrossNamespace: true
-    namespaces: []
-  kubernetesIngress:
-    enabled: false
-
-additionalArguments:
-  - "--api.insecure=true"
-  - "--api.dashboard=true"
-  - "--log.level=INFO"
-
-resources:
-  requests:
-    cpu: "100m"
-    memory: "128Mi"
-  limits:
-    cpu: "500m"
-    memory: "256Mi"
-EOF
-```
-
-3. Instalar Traefik con Helm:
-
-```bash
-helm install traefik traefik/traefik \
-  --namespace traefik \
-  --values /home/student/msvc-labs/k8s/traefik/values.yaml \
-  --version 28.3.0 \
-  --wait --timeout 120s
-```
-
-> **Nota:** La versión del chart Helm 28.3.0 empaqueta Traefik 3.0.4. Verifique con `helm search repo traefik/traefik --versions | grep 28.3` si necesita confirmar.
-
-4. Verificar que Traefik está corriendo:
-
-```bash
-kubectl get pods -n traefik
-kubectl get svc -n traefik
-```
-
-### Salida Esperada
-
-```
-NAME                       READY   STATUS    RESTARTS   AGE
-traefik-xxxxxxxxxx-xxxxx   1/1     Running   0          30s
-
-NAME      TYPE       CLUSTER-IP      EXTERNAL-IP   PORT(S)                                     AGE
-traefik   NodePort   10.96.xxx.xxx   <none>        80:3xxxx/TCP,443:3xxxx/TCP,9000:3xxxx/TCP   30s
-```
-
-### Verificación
-
-```bash
-# Obtener la URL del dashboard de Traefik
-TRAEFIK_URL=$(minikube service traefik -n traefik --url --profile=msvc-gateway | grep 9000)
-echo "Dashboard URL: ${TRAEFIK_URL}/dashboard/"
-
-# Verificar que el API de Traefik responde
-curl -s "${TRAEFIK_URL}/api/version" | python3 -m json.tool
-```
-
-Debe mostrar la versión de Traefik (`"Version": "3.0.4"`).
-
----
-
-## Paso 5: Configurar middlewares de Rate Limiting
-
-### Objetivo
-
-Crear middlewares de Traefik que implementen rate limiting diferenciado: 100 req/min para orders, 200 req/min para inventory y 50 req/min para users.
-
-### Instrucciones
-
-1. Crear el middleware de rate limiting para **orders-service** (100 req/min ≈ ~1.67 req/s):
-
-```bash
-cat > /home/student/msvc-labs/k8s/traefik/middlewares/ratelimit-orders.yaml << 'EOF'
-apiVersion: traefik.io/v1alpha1
-kind: Middleware
-metadata:
-  name: ratelimit-orders
-  namespace: microservices
-spec:
-  rateLimit:
-    average: 100
-    period: 1m
-    burst: 20
-EOF
-```
-
-2. Crear el middleware de rate limiting para **inventory-service** (200 req/min):
-
-```bash
-cat > /home/student/msvc-labs/k8s/traefik/middlewares/ratelimit-inventory.yaml << 'EOF'
-apiVersion: traefik.io/v1alpha1
-kind: Middleware
-metadata:
-  name: ratelimit-inventory
-  namespace: microservices
-spec:
-  rateLimit:
-    average: 200
-    period: 1m
-    burst: 40
-EOF
-```
-
-3. Crear el middleware de rate limiting para **users-service** (50 req/min):
-
-```bash
-cat > /home/student/msvc-labs/k8s/traefik/middlewares/ratelimit-users.yaml << 'EOF'
-apiVersion: traefik.io/v1alpha1
-kind: Middleware
-metadata:
-  name: ratelimit-users
-  namespace: microservices
-spec:
-  rateLimit:
-    average: 50
-    period: 1m
-    burst: 10
-EOF
-```
-
-4. Aplicar los middlewares:
-
-```bash
-kubectl apply -f /home/student/msvc-labs/k8s/traefik/middlewares/
-```
-
-### Salida Esperada
-
-```
-middleware.traefik.io/ratelimit-orders created
-middleware.traefik.io/ratelimit-inventory created
-middleware.traefik.io/ratelimit-users created
-```
-
-### Verificación
-
-```bash
-kubectl get middlewares -n microservices
-```
-
-Debe mostrar tres middlewares listados.
-
----
-
-## Paso 6: Configurar middleware de Circuit Breaker
-
-### Objetivo
-
-Crear un middleware de circuit breaker que abra el circuito cuando el 50% de las solicitudes en una ventana de 10 segundos resulten en errores.
-
-### Instrucciones
-
-1. Crear el middleware de circuit breaker compartido:
-
-```bash
-cat > /home/student/msvc-labs/k8s/traefik/middlewares/circuitbreaker-default.yaml << 'EOF'
-apiVersion: traefik.io/v1alpha1
-kind: Middleware
-metadata:
-  name: circuitbreaker-default
-  namespace: microservices
-spec:
-  circuitBreaker:
-    expression: "ResponseCodeRatio(500, 600, 0, 600) > 0.50"
-    checkPeriod: 10s
-    fallbackDuration: 15s
-    recoveryDuration: 30s
-EOF
-```
-
-2. Aplicar el middleware:
-
-```bash
-kubectl apply -f /home/student/msvc-labs/k8s/traefik/middlewares/circuitbreaker-default.yaml
-```
-
-### Salida Esperada
-
-```
-middleware.traefik.io/circuitbreaker-default created
-```
-
-### Verificación
-
-```bash
-kubectl get middlewares -n microservices
-```
-
-Debe mostrar 4 middlewares: `ratelimit-orders`, `ratelimit-inventory`, `ratelimit-users`, `circuitbreaker-default`.
-
----
-
-## Paso 7: Crear IngressRoutes para enrutar tráfico
-
-### Objetivo
-
-Configurar IngressRoute CRDs que enruten el tráfico desde el dominio `microservices.local` hacia cada microservicio, aplicando los middlewares de rate limiting y circuit breaker.
-
-### Instrucciones
-
-1. Crear la IngressRoute para **orders-service**:
-
-```bash
-cat > /home/student/msvc-labs/k8s/traefik/ingress-routes/orders-route.yaml << 'EOF'
-apiVersion: traefik.io/v1alpha1
-kind: IngressRoute
-metadata:
-  name: orders-route
-  namespace: microservices
-spec:
-  entryPoints:
-    - web
-  routes:
-    - match: Host(`microservices.local`) && PathPrefix(`/api/v1/orders`)
-      kind: Rule
-      services:
-        - name: orders-service
-          port: 8000
-      middlewares:
-        - name: ratelimit-orders
-        - name: circuitbreaker-default
-EOF
-```
-
-2. Crear la IngressRoute para **inventory-service**:
-
-```bash
-cat > /home/student/msvc-labs/k8s/traefik/ingress-routes/inventory-route.yaml << 'EOF'
-apiVersion: traefik.io/v1alpha1
-kind: IngressRoute
-metadata:
-  name: inventory-route
-  namespace: microservices
-spec:
-  entryPoints:
-    - web
-  routes:
-    - match: Host(`microservices.local`) && PathPrefix(`/api/v1/inventory`)
-      kind: Rule
-      services:
-        - name: inventory-service
-          port: 8000
-      middlewares:
-        - name: ratelimit-inventory
-        - name: circuitbreaker-default
-EOF
-```
-
-3. Crear la IngressRoute para **users-service**:
-
-```bash
-cat > /home/student/msvc-labs/k8s/traefik/ingress-routes/users-route.yaml << 'EOF'
-apiVersion: traefik.io/v1alpha1
-kind: IngressRoute
-metadata:
-  name: users-route
-  namespace: microservices
-spec:
-  entryPoints:
-    - web
-  routes:
-    - match: Host(`microservices.local`) && PathPrefix(`/api/v1/users`)
-      kind: Rule
-      services:
-        - name: users-service
-          port: 8000
-      middlewares:
-        - name: ratelimit-users
-        - name: circuitbreaker-default
-EOF
-```
-
-4. Aplicar las IngressRoutes:
-
-```bash
-kubectl apply -f /home/student/msvc-labs/k8s/traefik/ingress-routes/
-```
-
-5. Configurar la resolución DNS local para `microservices.local`:
-
-```bash
-MINIKUBE_IP=$(minikube ip --profile=msvc-gateway)
-echo "${MINIKUBE_IP} microservices.local" | sudo tee -a /etc/hosts
-```
-
-6. Obtener el puerto NodePort del entrypoint web de Traefik:
-
-```bash
-TRAEFIK_WEB_PORT=$(kubectl get svc traefik -n traefik -o jsonpath='{.spec.ports[?(@.name=="web")].nodePort}')
-echo "Traefik Web Port: ${TRAEFIK_WEB_PORT}"
-```
-
-### Salida Esperada
-
-```
-ingressroute.traefik.io/orders-route created
-ingressroute.traefik.io/inventory-route created
-ingressroute.traefik.io/users-route created
-```
-
-### Verificación
-
-```bash
-kubectl get ingressroutes -n microservices
-```
-
-Debe mostrar tres IngressRoutes. Prueba rápida de conectividad:
-
-```bash
-curl -s -H "Host: microservices.local" http://${MINIKUBE_IP}:${TRAEFIK_WEB_PORT}/api/v1/orders | python3 -m json.tool
-```
-
-Debe retornar la lista de órdenes.
-
----
-
-## Paso 8: Validar el enrutamiento básico
-
-### Objetivo
-
-Confirmar que Traefik enruta correctamente las solicitudes a cada microservicio según el prefijo de ruta.
-
-### Instrucciones
-
-1. Probar el endpoint de **orders-service**:
-
-```bash
-curl -s -H "Host: microservices.local" \
-  http://${MINIKUBE_IP}:${TRAEFIK_WEB_PORT}/api/v1/orders | python3 -m json.tool
-```
-
-2. Probar el endpoint de **inventory-service**:
-
-```bash
-curl -s -H "Host: microservices.local" \
-  http://${MINIKUBE_IP}:${TRAEFIK_WEB_PORT}/api/v1/inventory | python3 -m json.tool
-```
-
-3. Probar el endpoint de **users-service**:
-
-```bash
-curl -s -H "Host: microservices.local" \
-  http://${MINIKUBE_IP}:${TRAEFIK_WEB_PORT}/api/v1/users | python3 -m json.tool
-```
-
-4. Probar un endpoint específico con parámetro:
-
-```bash
-curl -s -H "Host: microservices.local" \
-  http://${MINIKUBE_IP}:${TRAEFIK_WEB_PORT}/api/v1/orders/1 | python3 -m json.tool
-```
-
-5. Verificar que una ruta inexistente retorna 404:
-
-```bash
-curl -s -o /dev/null -w "%{http_code}" -H "Host: microservices.local" \
-  http://${MINIKUBE_IP}:${TRAEFIK_WEB_PORT}/api/v1/nonexistent
-```
-
-### Salida Esperada
-
-```json
-{
-    "orders": [
-        {"id": 1, "product": "Laptop Pro", "quantity": 1, "status": "confirmed", "created_at": "2024-06-01T10:00:00Z"},
-        ...
-    ],
-    "total": 3
-}
-```
-
-```json
-{
-    "items": [
-        {"sku": "SKU-001", "name": "Laptop Pro", "quantity": 42, "warehouse": "Madrid"},
-        ...
-    ],
-    "total": 3
-}
-```
-
-```json
-{
-    "users": [
-        {"id": 1, "username": "admin-user", "email": "admin@example.com", "role": "admin"},
-        ...
-    ],
-    "total": 2
-}
-```
-
-El código HTTP para la ruta inexistente debe ser `404`.
-
-### Verificación
-
-Los tres servicios responden correctamente a través del gateway con datos válidos.
-
----
-
-## Paso 9: Validar Rate Limiting con prueba de carga
-
-### Objetivo
-
-Verificar que el middleware de rate limiting rechaza solicitudes que excedan los límites configurados (50 req/min para users-service).
-
-### Instrucciones
-
-1. Crear el script de prueba de rate limiting:
-
-```bash
-cat > /home/student/msvc-labs/scripts/test_ratelimit.py << 'EOF'
-#!/usr/bin/env python3
-"""
-Script para validar rate limiting en Traefik.
-Envía ráfagas de solicitudes al users-service (límite: 50 req/min, burst: 10)
-y cuenta las respuestas 429 (Too Many Requests).
-"""
-
-import subprocess
-import sys
-import time
-import json
-
-MINIKUBE_IP = subprocess.check_output(
-    ["minikube", "ip", "--profile=msvc-gateway"]
-).decode().strip()
-
-TRAEFIK_PORT = subprocess.check_output(
-    ["kubectl", "get", "svc", "traefik", "-n", "traefik",
-     "-o", "jsonpath={.spec.ports[?(@.name==\"web\")].nodePort}"]
-).decode().strip()
-
-BASE_URL = f"http://{MINIKUBE_IP}:{TRAEFIK_PORT}"
-ENDPOINT = "/api/v1/users"
-TOTAL_REQUESTS = 80  # Más que el límite de 50/min + burst 10
-
-print(f"{'='*60}")
-print(f"Prueba de Rate Limiting - users-service")
-print(f"Límite configurado: 50 req/min, burst: 10")
-print(f"Solicitudes a enviar: {TOTAL_REQUESTS}")
-print(f"URL: {BASE_URL}{ENDPOINT}")
-print(f"{'='*60}\n")
-
-results = {"200": 0, "429": 0, "other": 0}
-
-for i in range(TOTAL_REQUESTS):
-    try:
-        result = subprocess.run(
-            ["curl", "-s", "-o", "/dev/null", "-w", "%{http_code}",
-             "-H", "Host: microservices.local",
-             f"{BASE_URL}{ENDPOINT}"],
-            capture_output=True, text=True, timeout=5
-        )
-        code = result.stdout.strip()
-        if code == "200":
-            results["200"] += 1
-        elif code == "429":
-            results["429"] += 1
-        else:
-            results["other"] += 1
-
-        if (i + 1) % 20 == 0:
-            print(f"  Progreso: {i+1}/{TOTAL_REQUESTS} solicitudes enviadas...")
-
-    except Exception as e:
-        results["other"] += 1
-
-print(f"\n{'='*60}")
-print(f"RESULTADOS:")
-print(f"  ✅ Respuestas 200 (OK):              {results['200']}")
-print(f"  🚫 Respuestas 429 (Rate Limited):    {results['429']}")
-print(f"  ⚠️  Otras respuestas:                 {results['other']}")
-print(f"{'='*60}")
-
-if results["429"] > 0:
-    print("\n✅ PRUEBA EXITOSA: Rate limiting está funcionando correctamente.")
-    print(f"   Se bloquearon {results['429']} solicitudes que excedieron el límite.")
-else:
-    print("\n⚠️  ATENCIÓN: No se detectaron respuestas 429.")
-    print("   El rate limiting podría no estar activo o el burst es suficiente.")
-    sys.exit(1)
-EOF
-
-chmod +x /home/student/msvc-labs/scripts/test_ratelimit.py
-```
-
-2. Ejecutar la prueba:
-
-```bash
-python3 /home/student/msvc-labs/scripts/test_ratelimit.py
-```
-
-### Salida Esperada
-
-```
-============================================================
-Prueba de Rate Limiting - users-service
-Límite configurado: 50 req/min, burst: 10
-Solicitudes a enviar: 80
-URL: http://192.168.49.2:3xxxx/api/v1/users
-============================================================
-
-  Progreso: 20/80 solicitudes enviadas...
-  Progreso: 40/80 solicitudes enviadas...
-  Progreso: 60/80 solicitudes enviadas...
-  Progreso: 80/80 solicitudes enviadas...
-
-============================================================
-RESULTADOS:
-  ✅ Respuestas 200 (OK):              58
-  🚫 Respuestas 429 (Rate Limited):    22
-  ⚠️  Otras respuestas:                 0
-============================================================
-
-✅ PRUEBA EXITOSA: Rate limiting está funcionando correctamente.
-   Se bloquearon 22 solicitudes que excedieron el límite.
-```
-
-### Verificación
-
-El número de respuestas 429 debe ser mayor que 0, confirmando que el rate limiting está activo. Los valores exactos pueden variar según la velocidad de ejecución.
-
----
-
-## Paso 10: Validar Circuit Breaker con simulación de fallos
-
-### Objetivo
-
-Verificar que el circuit breaker de Traefik abre el circuito cuando más del 50% de las solicitudes generan errores 5xx en la ventana de 10 segundos.
-
-### Instrucciones
-
-1. Crear el script de prueba del circuit breaker:
-
-```bash
-cat > /home/student/msvc-labs/scripts/test_circuitbreaker.py << 'EOF'
-#!/usr/bin/env python3
-"""
-Script para validar circuit breaker en Traefik.
-Envía solicitudes al endpoint de fallo simulado de orders-service
-para disparar la apertura del circuito.
-"""
-
-import subprocess
-import time
-import sys
-
-MINIKUBE_IP = subprocess.check_output(
-    ["minikube", "ip", "--profile=msvc-gateway"]
-).decode().strip()
-
-TRAEFIK_PORT = subprocess.check_output(
-    ["kubectl", "get", "svc", "traefik", "-n", "traefik",
-     "-o", "jsonpath={.spec.ports[?(@.name==\"web\")].nodePort}"]
-).decode().strip()
-
-BASE_URL = f"http://{MINIKUBE_IP}:{TRAEFIK_PORT}"
-FAIL_ENDPOINT = "/api/v1/orders/fail/simulate"
-HEALTHY_ENDPOINT = "/api/v1/orders"
-
-print(f"{'='*60}")
-print(f"Prueba de Circuit Breaker - orders-service")
-print(f"Umbral: 50% errores en ventana de 10s")
-print(f"{'='*60}\n")
-
-# Fase 1: Generar errores para abrir el circuito
-print("📍 Fase 1: Generando errores 500 para abrir el circuito...")
-error_count = 0
-for i in range(30):
-    result = subprocess.run(
-        ["curl", "-s", "-o", "/dev/null", "-w", "%{http_code}",
-         "-H", "Host: microservices.local",
-         f"{BASE_URL}{FAIL_ENDPOINT}"],
-        capture_output=True, text=True, timeout=5
-    )
-    code = result.stdout.strip()
-    if code == "500":
-        error_count += 1
-    time.sleep(0.1)
-
-print(f"   Errores 500 generados: {error_count}/30")
-
-# Fase 2: Verificar que el circuito está abierto
-print("\n📍 Fase 2: Verificando estado del circuito (solicitudes al endpoint saludable)...")
-time.sleep(1)
-
-circuit_open_responses = 0
-for i in range(10):
-    result = subprocess.run(
-        ["curl", "-s", "-o", "/dev/null", "-w", "%{http_code}",
-         "-H", "Host: microservices.local",
-         f"{BASE_URL}{HEALTHY_ENDPOINT}"],
-        capture_output=True, text=True, timeout=5
-    )
-    code = result.stdout.strip()
-    if code == "503":
-        circuit_open_responses += 1
-    time.sleep(0.2)
-
-print(f"   Respuestas 503 (circuito abierto): {circuit_open_responses}/10")
-
-# Fase 3: Esperar recuperación
-print(f"\n📍 Fase 3: Esperando recuperación del circuito (30s)...")
-time.sleep(35)
-
-recovery_success = 0
-for i in range(10):
-    result = subprocess.run(
-        ["curl", "-s", "-o", "/dev/null", "-w", "%{http_code}",
-         "-H", "Host: microservices.local",
-         f"{BASE_URL}{HEALTHY_ENDPOINT}"],
-        capture_output=True, text=True, timeout=5
-    )
-    code = result.stdout.strip()
-    if code == "200":
-        recovery_success += 1
-    time.sleep(0.2)
-
-print(f"   Respuestas 200 tras recuperación: {recovery_success}/10")
-
-print(f"\n{'='*60}")
-print("RESULTADOS:")
-if circuit_open_responses > 0:
-    print(f"  ✅ Circuit breaker se ACTIVÓ: {circuit_open_responses} solicitudes bloqueadas con 503")
-else:
-    print(f"  ⚠️  Circuit breaker NO se activó visiblemente.")
-    print(f"      Esto puede ocurrir si la expresión evalúa solo el ratio del servicio específico.")
-
-if recovery_success > 5:
-    print(f"  ✅ Servicio se RECUPERÓ: {recovery_success}/10 solicitudes exitosas")
-else:
-    print(f"  ⚠️  Recuperación parcial: {recovery_success}/10 solicitudes exitosas")
-print(f"{'='*60}")
-EOF
-
-chmod +x /home/student/msvc-labs/scripts/test_circuitbreaker.py
-```
-
-2. Ejecutar la prueba del circuit breaker:
-
-```bash
-python3 /home/student/msvc-labs/scripts/test_circuitbreaker.py
-```
-
-### Salida Esperada
-
-```
-============================================================
-Prueba de Circuit Breaker - orders-service
-Umbral: 50% errores en ventana de 10s
-============================================================
-
-📍 Fase 1: Generando errores 500 para abrir el circuito...
-   Errores 500 generados: 30/30
-
-📍 Fase 2: Verificando estado del circuito (solicitudes al endpoint saludable)...
-   Respuestas 503 (circuito abierto): 7/10
-
-📍 Fase 3: Esperando recuperación del circuito (30s)...
-   Respuestas 200 tras recuperación: 10/10
-
-============================================================
-RESULTADOS:
-  ✅ Circuit breaker se ACTIVÓ: 7 solicitudes bloqueadas con 503
-  ✅ Servicio se RECUPERÓ: 10/10 solicitudes exitosas
-============================================================
-```
-
-### Verificación
-
-Las respuestas 503 en la Fase 2 confirman que el circuit breaker se activó. La recuperación en la Fase 3 confirma que el circuito se cierra tras el período de recuperación configurado (30s).
-
----
-
-## Validación y Pruebas Finales
-
-Ejecute la siguiente secuencia de validación completa para confirmar que todo el sistema funciona correctamente:
-
-```bash
-cat > /home/student/msvc-labs/scripts/validate_all.sh << 'EOF'
-#!/bin/bash
-set -e
-
-echo "=========================================="
-echo "VALIDACIÓN COMPLETA DEL LABORATORIO"
-echo "=========================================="
-
-MINIKUBE_IP=$(minikube ip --profile=msvc-gateway)
-TRAEFIK_PORT=$(kubectl get svc traefik -n traefik -o jsonpath='{.spec.ports[?(@.name=="web")].nodePort}')
-BASE="http://${MINIKUBE_IP}:${TRAEFIK_PORT}"
-PASS=0
-FAIL=0
-
-check() {
-    local desc="$1"
-    local expected="$2"
-    local actual="$3"
-    if [ "$actual" == "$expected" ]; then
-        echo "  ✅ ${desc}"
-        ((PASS++))
-    else
-        echo "  ❌ ${desc} (esperado: ${expected}, obtenido: ${actual})"
-        ((FAIL++))
-    fi
-}
-
-echo ""
-echo "1. Verificando pods en ejecución..."
-PODS_READY=$(kubectl get pods -n microservices --field-selector=status.phase=Running --no-headers | wc -l)
-check "Pods running en microservices (esperado: 6)" "6" "${PODS_READY}"
-
-echo ""
-echo "2. Verificando Traefik..."
-TRAEFIK_PODS=$(kubectl get pods -n traefik --field-selector=status.phase=Running --no-headers | wc -l)
-check "Traefik pod running" "1" "${TRAEFIK_PODS}"
-
-echo ""
-echo "3. Verificando enrutamiento..."
-CODE_ORDERS=$(curl -s -o /dev/null -w "%{http_code}" -H "Host: microservices.local" "${BASE}/api/v1/orders")
-check "Orders endpoint accesible" "200" "${CODE_ORDERS}"
-
-CODE_INVENTORY=$(curl -s -o /dev/null -w "%{http_code}" -H "Host: microservices.local" "${BASE}/api/v1/inventory")
-check "Inventory endpoint accesible" "200" "${CODE_INVENTORY}"
-
-CODE_USERS=$(curl -s -o /dev/null -w "%{http_code}" -H "Host: microservices.local" "${BASE}/api/v1/users")
-check "Users endpoint accesible" "200" "${CODE_USERS}"
-
-echo ""
-echo "4. Verificando middlewares..."
-MW_COUNT=$(kubectl get middlewares -n microservices --no-headers | wc -l)
-check "Middlewares configurados (esperado: 4)" "4" "${MW_COUNT}"
-
-echo ""
-echo "5. Verificando IngressRoutes..."
-IR_COUNT=$(kubectl get ingressroutes -n microservices --no-headers | wc -l)
-check "IngressRoutes configuradas (esperado: 3)" "3" "${IR_COUNT}"
-
-echo ""
-echo "6. Verificando dashboard Traefik..."
-DASHBOARD_PORT=$(kubectl get svc traefik -n traefik -o jsonpath='{.spec.ports[?(@.name=="traefik")].nodePort}')
-CODE_DASHBOARD=$(curl -s -o /dev/null -w "%{http_code}" "http://${MINIKUBE_IP}:${DASHBOARD_PORT}/api/version")
-check "Dashboard Traefik accesible" "200" "${CODE_DASHBOARD}"
-
-echo ""
-echo "=========================================="
-echo "RESUMEN: ${PASS} pruebas exitosas, ${FAIL} fallidas"
-echo "=========================================="
-
-if [ ${FAIL} -gt 0 ]; then
-    exit 1
-fi
-EOF
-
-chmod +x /home/student/msvc-labs/scripts/validate_all.sh
-bash /home/student/msvc-labs/scripts/validate_all.sh
-```
-
-### Resultado Esperado
-
-```
-==========================================
-VALIDACIÓN COMPLETA DEL LABORATORIO
-==========================================
-
-1. Verificando pods en ejecución...
-  ✅ Pods running en microservices (esperado: 6)
-
-2. Verificando Traefik...
-  ✅ Traefik pod running
-
-3. Verificando enrutamiento...
-  ✅ Orders endpoint accesible
-  ✅ Inventory endpoint accesible
-  ✅ Users endpoint accesible
-
-4. Verificando middlewares...
-  ✅ Middlewares configurados (esperado: 4)
-
-5. Verificando IngressRoutes...
-  ✅ IngressRoutes configuradas (esperado: 3)
-
-6. Verificando dashboard Traefik...
-  ✅ Dashboard Traefik accesible
-
-==========================================
-RESUMEN: 8 pruebas exitosas, 0 fallidas
-==========================================
-```
-
----
-
-## Solución de Problemas
-
-### Problema 1: Pods de microservicios en estado ImagePullBackOff
-
-**Síntomas:**
-
-```
-kubectl get pods -n microservices
-NAME                               READY   STATUS             RESTARTS   AGE
-orders-service-xxx-yyy             0/1     ImagePullBackOff   0          60s
-```
-
-**Causa:** El Docker daemon del host no está sincronizado con el de minikube. Las imágenes se construyeron en el daemon del host pero minikube no puede acceder a ellas.
-
-**Solución:**
-
-```bash
-# Verificar que se está usando el daemon de minikube
-eval $(minikube docker-env --profile=msvc-gateway)
-
-# Confirmar que las imágenes existen en el daemon correcto
-docker images | grep -E "orders|inventory|users"
-
-# Si no aparecen, reconstruir dentro del contexto de minikube
-docker build -f /home/student/msvc-labs/docker/Dockerfile -t orders-service:1.0.0 /home/student/msvc-labs/services/orders-service/
-docker build -f /home/student/msvc-labs/docker/Dockerfile -t inventory-service:1.0.0 /home/student/msvc-labs/services/inventory-service/
-docker build -f /home/student/msvc-labs/docker/Dockerfile -t users-service:1.0.0 /home/student/msvc-labs/services/users-service/
-
-# Reiniciar los deployments
-kubectl rollout restart deployment -n microservices
-```
-
-Verificar que `imagePullPolicy: Never` está configurado en los Deployments para que Kubernetes use las imágenes locales.
-
----
-
-### Problema 2: IngressRoute no enruta tráfico (respuesta 404 de Traefik)
-
-**Síntomas:**
-
-```bash
-curl -H "Host: microservices.local" http://<minikube-ip>:<port>/api/v1/orders
-# Responde: 404 page not found
-```
-
-**Causa:** Traefik no tiene permisos para leer CRDs en otros namespaces, o la opción `allowCrossNamespace` no está habilitada. Las IngressRoutes están en el namespace `microservices` pero Traefik está en `traefik`.
-
-**Solución:**
-
-```bash
-# Verificar que allowCrossNamespace está habilitado
-kubectl get deployment traefik -n traefik -o yaml | grep -A5 "kubernetesCRD"
-
-# Si no está habilitado, actualizar la instalación de Helm
-helm upgrade traefik traefik/traefik \
-  --namespace traefik \
-  --values /home/student/msvc-labs/k8s/traefik/values.yaml \
-  --wait
-
-# Verificar que Traefik detecta las rutas
-DASHBOARD_PORT=$(kubectl get svc traefik -n traefik -o jsonpath='{.spec.ports[?(@.name=="traefik")].nodePort}')
-MINIKUBE_IP=$(minikube ip --profile=msvc-gateway)
-curl -s "http://${MINIKUBE_IP}:${DASHBOARD_PORT}/api/http/routers" | python3 -m json.tool | grep "orders"
-
-# Verificar logs de Traefik para errores de permisos
-kubectl logs -n traefik -l app.kubernetes.io/name=traefik --tail=50 | grep -i "error\|forbidden"
-```
-
-Si los logs muestran errores RBAC, verificar que el ClusterRole de Traefik incluye permisos sobre `traefik.io` resources en todos los namespaces.
-
----
-
-## Limpieza
-
-Para eliminar todos los recursos creados en este laboratorio:
-
-```bash
-# Eliminar IngressRoutes y Middlewares
-kubectl delete -f /home/student/msvc-labs/k8s/traefik/ingress-routes/
-kubectl delete -f /home/student/msvc-labs/k8s/traefik/middlewares/
-
-# Eliminar microservicios
-kubectl delete -f /home/student/msvc-labs/k8s/services/
-kubectl delete -f /home/student/msvc-labs/k8s/deployments/
-
-# Desinstalar Traefik
-helm uninstall traefik -n traefik
-
-# Eliminar namespaces
-kubectl delete namespace microservices
-kubectl delete namespace traefik
-
-# Eliminar entrada en /etc/hosts
-sudo sed -i '/microservices.local/d' /etc/hosts
-
-# Detener minikube (opcional - mantener si continúas con labs posteriores)
-# minikube stop --profile=msvc-gateway
-
-# Eliminar clúster completamente (solo si no necesitas el entorno)
-# minikube delete --profile=msvc-gateway
-```
-
-> **Nota:** Si vas a continuar con laboratorios posteriores del batch 2, **no elimines** el clúster minikube ni el directorio `/home/student/msvc-labs/`. Estos recursos se reutilizan como base.
-
----
-
-## Resumen
-
-En este laboratorio has completado las siguientes tareas:
-
-| Tarea | Estado |
-|-------|--------|
-| Clúster minikube con namespaces configurados | ✅ |
-| Tres microservicios FastAPI desplegados como Deployments | ✅ |
-| Traefik 3.0.4 instalado via Helm con CRDs habilitados | ✅ |
-| IngressRoutes configuradas para enrutamiento por prefijo de ruta | ✅ |
-| Rate limiting diferenciado (100/200/50 req/min) | ✅ |
-| Circuit breaker con umbral del 50% en ventana de 10s | ✅ |
-| Validación funcional con scripts automatizados | ✅ |
-
-### Conceptos Clave Aplicados
-
-- **Proxy inverso simple**: Traefik actúa como punto único de entrada, enrutando por prefijo de ruta URL (`/api/v1/orders` → orders-service).
-- **Configuración declarativa**: Todos los middlewares y rutas se definen como CRDs de Kubernetes, facilitando GitOps.
-- **Rate limiting en el edge**: La protección se aplica antes de que el tráfico llegue a los servicios, preservando recursos backend.
-- **Circuit breaker**: Protege contra fallos cascada abriendo el circuito cuando la tasa de errores supera el umbral.
-
-### Recursos Adicionales
-
-- [Documentación oficial de Traefik 3.0 - IngressRoute](https://doc.traefik.io/traefik/routing/providers/kubernetes-crd/)
-- [Traefik Middleware - RateLimit](https://doc.traefik.io/traefik/middlewares/http/ratelimit/)
-- [Traefik Middleware - CircuitBreaker](https://doc.traefik.io/traefik/middlewares/http/circuitbreaker/)
-- [FastAPI - Deployment en Kubernetes](https://fastapi.tiangolo.com/deployment/docker/)
+**183 pruebas aprobadas** (119 Orders, 57 Inventory, 7 Users). Políticas ejecutadas con Traefik real: rate limiting, reposición/aislamiento, apertura y recuperación del circuito. Se validaron 35 manifests y el chart Helm. El rollout completo minikube y la reserva mediante Kafka en Kubernetes deben validarse con `deploy.sh` y `validate_all.sh` en el equipo del alumno; no se ejecutaron en el entorno de revisión. Consulta el informe incluido para el alcance exacto.

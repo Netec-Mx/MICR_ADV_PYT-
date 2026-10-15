@@ -1,0 +1,5 @@
+mesh:
+  enabled: true
+  variant: blue
+  extra:
+    variant: green

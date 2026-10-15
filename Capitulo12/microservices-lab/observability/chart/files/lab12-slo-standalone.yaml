@@ -1,0 +1,17 @@
+groups:
+- name: lab12-client-slo
+  rules:
+  - record: lab12:availability:ratio2m
+    expr: 1 - (sum by (service, run_id) (rate(k6_lab12_bad_requests_total[2m])) / sum by (service, run_id) (rate(k6_lab12_requests_total[2m])))
+  - record: lab12:availability:burn2m
+    expr: (1 - lab12:availability:ratio2m) / 0.005
+  - record: lab12:latency:good_ratio2m
+    expr: 1 - (sum by (service, run_id) (rate(k6_lab12_slow_requests_total[2m])) / sum by (service, run_id) (rate(k6_lab12_requests_total[2m])))
+  - alert: Lab12AvailabilityFastBurn
+    expr: lab12:availability:burn2m > 14.4 and on (service, run_id) sum by (service, run_id) (rate(k6_lab12_requests_total[2m])) > 0
+    for: 30s
+    labels:
+      severity: warning
+      lab: lab12
+    annotations:
+      summary: "Error budget de disponibilidad consumiéndose rápidamente"

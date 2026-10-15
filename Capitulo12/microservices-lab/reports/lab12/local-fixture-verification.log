@@ -1,0 +1,13 @@
+Checking /tmp/lab12-rules.yaml
+  SUCCESS: 10 rules found
+
+CRD VALID cpu-stress.yaml
+CRD VALID pod-kill.yaml
+CRD VALID redis-partition.yaml
+CRD VALID network-delay.yaml
+LATENCY PROM {'resultType': 'vector', 'result': [{'metric': {'__name__': 'k6_lab12_latency_p95', 'operation': 'get', 'profile': 'smoke', 'run_id': 'fixture-verification', 'scenario': 'default', 'service': 'inventory-service'}, 'value': [1791503324.07, '0.0006835644000000006']}, {'metric': {'__name__': 'k6_lab12_latency_p95', 'operation': 'create', 'profile': 'smoke', 'run_id': 'fixture-verification', 'scenario': 'default', 'service': 'order-service'}, 'value': [1791503324.07, '0.00084881895']}, {'metric': {'__name__': 'k6_lab12_latency_p95', 'operation': 'list', 'profile': 'smoke', 'run_id': 'fixture-verification', 'scenario': 'default', 'service': 'order-service'}, 'value': [1791503324.07, '0.00139384725']}]}
+LATENCY SUMMARY {'contains': 'time', 'values': {'p(95)': 1.092486199999999, 'p(99)': 1.9786704899999994}, 'thresholds': {'p(95)<500': {'ok': True}}, 'type': 'trend'}
+K6 HTTP + TOKEN + MIXED PAYLOAD + PROM REMOTE WRITE: PASS
+METRIC NAMES ['k6_checks_rate', 'k6_data_received_total', 'k6_data_sent_total', 'k6_http_req_blocked_p95', 'k6_http_req_blocked_p99', 'k6_http_req_connecting_p95', 'k6_http_req_connecting_p99', 'k6_http_req_duration_p95', 'k6_http_req_duration_p99', 'k6_http_req_failed_rate', 'k6_http_req_receiving_p95', 'k6_http_req_receiving_p99', 'k6_http_req_sending_p95', 'k6_http_req_sending_p99', 'k6_http_req_tls_handshaking_p95', 'k6_http_req_tls_handshaking_p99', 'k6_http_req_waiting_p95', 'k6_http_req_waiting_p99', 'k6_http_reqs_total', 'k6_iteration_duration_p95', 'k6_iteration_duration_p99', 'k6_iterations_total', 'k6_lab12_bad_requests_total', 'k6_lab12_deferred_orders_total', 'k6_lab12_errors_rate', 'k6_lab12_latency_p95', 'k6_lab12_latency_p99', 'k6_lab12_requests_total', 'k6_lab12_slow_rate_rate', 'k6_lab12_slow_requests_total', 'k6_vus', 'k6_vus_max']
+ANALYSIS [{'service': 'inventory-service', 'phase': 'whole-run', 'requests': 20, 'bad': 0, 'availability': 1.0, 'availability_budget_consumed': 0.0, 'latency_budget_consumed': 0.0, 'p95_ms': 0.645715, 'latency_good_fraction': 1.0}, {'service': 'order-service', 'phase': 'whole-run', 'requests': 20, 'bad': 0, 'availability': 1.0, 'availability_budget_consumed': 0.0, 'latency_budget_consumed': 0.0, 'p95_ms': 1.076159, 'latency_good_fraction': 1.0}]
+BUDGET: 2 BAD / 100 REQUESTS = 400% WINDOW BUDGET; NO DATA IS EMPTY: PASS

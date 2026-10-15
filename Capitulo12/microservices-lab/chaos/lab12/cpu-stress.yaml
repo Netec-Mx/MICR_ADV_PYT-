@@ -1,0 +1,21 @@
+apiVersion: chaos-mesh.org/v1alpha1
+metadata:
+  namespace: chaos-testing
+  labels:
+    lab12-owned: 'true'
+  name: lab12-cpu-stress
+kind: StressChaos
+spec:
+  mode: one
+  selector:
+    namespaces:
+    - microservices
+    labelSelectors:
+      app: order-service
+  containerNames:
+  - order-service
+  stressors:
+    cpu:
+      workers: 1
+      load: 80
+  duration: 60s

@@ -1,4 +1,4 @@
-# 4 Laboratorio: prototipo de servicio con FastAPI y pruebas contractuales
+# 1 Laboratorio: prototipo de servicio con FastAPI y pruebas contractuales
 
 ## Metadatos
 
