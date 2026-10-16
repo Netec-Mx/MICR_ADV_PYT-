@@ -73,7 +73,7 @@ Cada laboratorio continúa el trabajo del anterior. Haz clic en su título para 
 #### [Laboratorio 9. Imágenes optimizadas y despliegues con Helm](Capitulo09/README.md)
 
 - **Descripción**: Construir imágenes Docker con etapas múltiples y usuario no root, medir su tamaño frente a una imagen base y analizar vulnerabilidades con Trivy. Parametrizar un chart Helm para los tres servicios, publicar las imágenes en el registry local de minikube y verificar despliegues, actualizaciones y rollback mediante revisiones y digests.
-- ⏱️ **Duración estimada**: 66 min de trabajo guiado; reservar 30–60 min adicionales para la primera preparación.
+- ⏱️ **Duración estimada**: 66 min 
 
 ### Capítulo 10: Orquestación con Kubernetes y service mesh
 
@@ -87,16 +87,15 @@ Cada laboratorio continúa el trabajo del anterior. Haz clic en su título para 
 #### [Laboratorio 11. Pipeline desde commit hasta Kubernetes con GitOps](Capitulo11/README.md)
 
 - **Descripción**: Separar el código de aplicación y la configuración GitOps en dos repositorios. Automatizar pruebas, cobertura, construcción, escaneo y publicación de imágenes mediante GitHub Actions; desplegar Pedidos por digest con Argo CD. Comprobar self-healing y utilizar un observador que verifica la release y revierte en Git una promoción fallida.
-- ⏱️ **Duración estimada**: 66 min según el temario.
-- **Observación de planificación**: la guía revisada recomienda 90–120 min de sesión para incluir esperas de CI y recuperación.
+- ⏱️ **Duración estimada**: 66 min 
+
 
 ### Capítulo 12: Pruebas avanzadas, chaos engineering y operación en producción
 
 #### [Laboratorio 12. Carga, caos controlado y SLOs](Capitulo12/README.md)
 
 - **Descripción**: Diseñar escenarios smoke, load, stress y spike con k6 y observar sus resultados en Prometheus y Grafana. Inyectar fallos de pods, red y recursos con Chaos Mesh sobre el entorno local del curso; comprobar contratos durante el fallo, evaluar indicadores y objetivos de servicio y documentar la recuperación en un postmortem con evidencias.
-- ⏱️ **Duración estimada**: 66 min según el temario.
-- **Observación de planificación**: la guía revisada recomienda 90–120 min para los experimentos con baseline y recuperación; señala que los 66 min originales resultaban insuficientes. Requiere el laboratorio 11 operativo y las herramientas preparadas.
+- ⏱️ **Duración estimada**: 66 min 
 
 ---
 
