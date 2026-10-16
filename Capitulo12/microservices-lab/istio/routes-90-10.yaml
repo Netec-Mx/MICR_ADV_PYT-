@@ -1,0 +1,153 @@
+apiVersion: networking.istio.io/v1
+kind: VirtualService
+metadata:
+  name: lab10-ingress
+  namespace: microservices
+spec:
+  hosts:
+  - microservices.local
+  gateways:
+  - lab10-gateway
+  http:
+  - name: orders-canary
+    match:
+    - uri:
+        exact: /api/v1/orders
+    - uri:
+        prefix: /api/v1/orders/
+    route:
+    - destination:
+        host: order-service.microservices.svc.cluster.local
+        subset: v1
+        port:
+          number: 8001
+      weight: 90
+    - destination:
+        host: order-service.microservices.svc.cluster.local
+        subset: v2
+        port:
+          number: 8001
+      weight: 10
+    retries:
+      attempts: 0
+  - name: inventory-green
+    match:
+    - uri:
+        exact: /api/v1/products
+      headers:
+        x-version:
+          exact: green
+    - uri:
+        prefix: /api/v1/products/
+      headers:
+        x-version:
+          exact: green
+    - uri:
+        exact: /api/v1/reservations
+      headers:
+        x-version:
+          exact: green
+    - uri:
+        prefix: /api/v1/reservations/
+      headers:
+        x-version:
+          exact: green
+    route:
+    - destination:
+        host: inventory-service.microservices.svc.cluster.local
+        subset: green
+        port:
+          number: 8002
+    retries:
+      attempts: 0
+  - name: inventory-blue
+    match:
+    - uri:
+        exact: /api/v1/products
+    - uri:
+        prefix: /api/v1/products/
+    - uri:
+        exact: /api/v1/reservations
+    - uri:
+        prefix: /api/v1/reservations/
+    route:
+    - destination:
+        host: inventory-service.microservices.svc.cluster.local
+        subset: blue
+        port:
+          number: 8002
+    retries:
+      attempts: 0
+  - name: users
+    match:
+    - uri:
+        exact: /api/v1/users
+    - uri:
+        prefix: /api/v1/users/
+    route:
+    - destination:
+        host: users-service.microservices.svc.cluster.local
+        subset: stable
+        port:
+          number: 8003
+    retries:
+      attempts: 0
+---
+apiVersion: networking.istio.io/v1
+kind: VirtualService
+metadata:
+  name: lab10-orders-mesh
+  namespace: microservices
+spec:
+  hosts:
+  - order-service.microservices.svc.cluster.local
+  gateways:
+  - mesh
+  http:
+  - route:
+    - destination:
+        host: order-service.microservices.svc.cluster.local
+        subset: v1
+        port:
+          number: 8001
+      weight: 90
+    - destination:
+        host: order-service.microservices.svc.cluster.local
+        subset: v2
+        port:
+          number: 8001
+      weight: 10
+    retries:
+      attempts: 0
+---
+apiVersion: networking.istio.io/v1
+kind: VirtualService
+metadata:
+  name: lab10-inventory-mesh
+  namespace: microservices
+spec:
+  hosts:
+  - inventory-service.microservices.svc.cluster.local
+  gateways:
+  - mesh
+  http:
+  - match:
+    - headers:
+        x-version:
+          exact: green
+    route:
+    - destination:
+        host: inventory-service.microservices.svc.cluster.local
+        subset: green
+        port:
+          number: 8002
+    retries:
+      attempts: 0
+  - route:
+    - destination:
+        host: inventory-service.microservices.svc.cluster.local
+        subset: blue
+        port:
+          number: 8002
+    retries:
+      attempts: 0

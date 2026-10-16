@@ -1,0 +1,18 @@
+name: inventory-service
+port: 8002
+image:
+  repository: localhost:5000/inventory-service
+env:
+  AUTH_ENABLED: 'true'
+  AUTH_ISSUER: http://localhost:8080/realms/microservices-lab
+  AUTH_JWKS_URL: http://keycloak:8080/realms/microservices-lab/protocol/openid-connect/certs
+  MESSAGING_ENABLED: 'true'
+  KAFKA_BOOTSTRAP_SERVERS: kafka:9092
+  REDIS_URL: redis://redis:6379/0
+  VAULT_ADDR: http://vault.vault.svc:8200
+  VAULT_ROLE: inventory-service
+  VAULT_SECRET_PATH: inventory-service
+  VAULT_POLL_SECONDS: '5'
+  VAULT_MAX_AGE_SECONDS: '20'
+  OBSERVABILITY_ENABLED: 'true'
+  OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector.observability.svc:4317

@@ -1,0 +1,174 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "name",
+    "port",
+    "replicaCount",
+    "appVersion",
+    "image",
+    "resources",
+    "env"
+  ],
+  "properties": {
+    "name": {
+      "enum": [
+        "order-service",
+        "inventory-service",
+        "users-service"
+      ]
+    },
+    "port": {
+      "type": "integer",
+      "enum": [
+        8001,
+        8002,
+        8003
+      ]
+    },
+    "replicaCount": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 1
+    },
+    "appVersion": {
+      "type": "string",
+      "pattern": "^\\d+\\.\\d+\\.\\d+$"
+    },
+    "image": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "repository",
+        "digest",
+        "pullPolicy"
+      ],
+      "properties": {
+        "repository": {
+          "type": "string",
+          "pattern": "^localhost:5000/(order|inventory|users)-service$"
+        },
+        "digest": {
+          "type": "string",
+          "pattern": "^sha256:[a-f0-9]{64}$"
+        },
+        "pullPolicy": {
+          "const": "Always"
+        }
+      }
+    },
+    "resources": {
+      "type": "object",
+      "required": [
+        "requests",
+        "limits"
+      ]
+    },
+    "env": {
+      "type": "object",
+      "required": [
+        "AUTH_ENABLED",
+        "OBSERVABILITY_ENABLED",
+        "VAULT_ADDR",
+        "VAULT_ROLE",
+        "VAULT_SECRET_PATH",
+        "OTEL_EXPORTER_OTLP_ENDPOINT"
+      ],
+      "propertyNames": {
+        "not": {
+          "enum": [
+            "APP_VERSION",
+            "VAULT_TOKEN",
+            "EVENTSTORE_DATABASE_URL",
+            "EVENTSTORE_ADMIN_KEY",
+            "ORDER_SERVICE_CLIENT_SECRET",
+            "POD_NAME"
+          ]
+        }
+      },
+      "properties": {
+        "AUTH_ENABLED": {
+          "const": "true"
+        },
+        "OBSERVABILITY_ENABLED": {
+          "const": "true"
+        }
+      },
+      "additionalProperties": {
+        "type": "string"
+      }
+    }
+  },
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "name": {
+            "const": "order-service"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "port": {
+            "const": 8001
+          },
+          "image": {
+            "properties": {
+              "repository": {
+                "const": "localhost:5000/order-service"
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "name": {
+            "const": "inventory-service"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "port": {
+            "const": 8002
+          },
+          "image": {
+            "properties": {
+              "repository": {
+                "const": "localhost:5000/inventory-service"
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "name": {
+            "const": "users-service"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "port": {
+            "const": 8003
+          },
+          "image": {
+            "properties": {
+              "repository": {
+                "const": "localhost:5000/users-service"
+              }
+            }
+          }
+        }
+      }
+    }
+  ]
+}

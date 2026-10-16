@@ -1,0 +1,684 @@
+openapi: 3.1.0
+info:
+  title: OrderService Event Sourcing / CQRS
+  version: 4.0.0
+paths:
+  /api/v1/orders/check-stock/{product_id}:
+    get:
+      tags:
+      - Resilience
+      summary: Check Stock
+      operationId: check_stock_api_v1_orders_check_stock__product_id__get
+      parameters:
+      - name: product_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+          title: Product Id
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StockResponse'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+        '503':
+          description: Persistencia no disponible
+  /health/circuit-breakers:
+    get:
+      tags:
+      - Resilience
+      summary: Status
+      operationId: status_health_circuit_breakers_get
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
+        '503':
+          description: Redis unavailable
+  /health/circuit-breakers/{service_name}/reset:
+    post:
+      tags:
+      - Resilience
+      summary: Reset
+      operationId: reset_health_circuit_breakers__service_name__reset_post
+      parameters:
+      - name: service_name
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Service Name
+      - name: X-Admin-Key
+        in: header
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: X-Admin-Key
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
+        '403':
+          description: Invalid admin key
+        '404':
+          description: Unknown circuit
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/orders:
+    post:
+      tags:
+      - Orders CQRS
+      summary: Create
+      operationId: create_api_v1_orders_post
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/OrderCreate'
+      responses:
+        '201':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OrderResponse'
+          headers:
+            X-Aggregate-Version:
+              schema:
+                type: integer
+                minimum: 1
+              description: Versión secuencial del agregado
+            X-Stock-Precheck:
+              schema:
+                type: string
+                enum:
+                - verified
+                - deferred
+              description: Consulta conocida o comprobación diferida; no confirma
+                reserva
+        '409':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BusinessError'
+          description: Conflict
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+        '503':
+          description: Persistencia no disponible
+    get:
+      tags:
+      - Orders CQRS
+      summary: List Orders
+      operationId: list_orders_api_v1_orders_get
+      parameters:
+      - name: limit
+        in: query
+        required: false
+        schema:
+          type: integer
+          maximum: 100
+          minimum: 1
+          default: 50
+          title: Limit
+      - name: offset
+        in: query
+        required: false
+        schema:
+          type: integer
+          minimum: 0
+          default: 0
+          title: Offset
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/OrderResponse'
+                title: Response List Orders Api V1 Orders Get
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+        '503':
+          description: Persistencia no disponible
+  /api/v1/orders/{order_id}:
+    get:
+      tags:
+      - Orders CQRS
+      summary: Get
+      operationId: get_api_v1_orders__order_id__get
+      parameters:
+      - name: order_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+          title: Order Id
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OrderResponse'
+          headers:
+            X-Aggregate-Version:
+              schema:
+                type: integer
+                minimum: 1
+              description: Versión secuencial del agregado
+        '404':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BusinessError'
+          description: Not Found
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+        '503':
+          description: Persistencia no disponible
+  /api/v1/orders/{order_id}/status:
+    patch:
+      tags:
+      - Orders CQRS
+      summary: Status
+      operationId: status_api_v1_orders__order_id__status_patch
+      parameters:
+      - name: order_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+          title: Order Id
+      - name: X-Expected-Version
+        in: header
+        required: false
+        schema:
+          anyOf:
+          - type: integer
+            minimum: 1
+          - type: 'null'
+          title: X-Expected-Version
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ChangeStatusRequest'
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OrderResponse'
+          headers:
+            X-Aggregate-Version:
+              schema:
+                type: integer
+                minimum: 1
+              description: Versión secuencial del agregado
+        '404':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BusinessError'
+          description: Not Found
+        '409':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BusinessError'
+          description: Conflict
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+        '503':
+          description: Persistencia no disponible
+  /api/v1/orders/{order_id}/cancel:
+    patch:
+      tags:
+      - Orders CQRS
+      summary: Cancel
+      operationId: cancel_api_v1_orders__order_id__cancel_patch
+      parameters:
+      - name: order_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+          title: Order Id
+      - name: X-Expected-Version
+        in: header
+        required: false
+        schema:
+          anyOf:
+          - type: integer
+            minimum: 1
+          - type: 'null'
+          title: X-Expected-Version
+      requestBody:
+        content:
+          application/json:
+            schema:
+              anyOf:
+              - $ref: '#/components/schemas/CancelRequest'
+              - type: 'null'
+              title: Payload
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OrderResponse'
+          headers:
+            X-Aggregate-Version:
+              schema:
+                type: integer
+                minimum: 1
+              description: Versión secuencial del agregado
+        '404':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BusinessError'
+          description: Not Found
+        '409':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BusinessError'
+          description: Conflict
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+        '503':
+          description: Persistencia no disponible
+  /api/v1/orders/{order_id}/items:
+    post:
+      tags:
+      - Orders CQRS
+      summary: Item
+      operationId: item_api_v1_orders__order_id__items_post
+      parameters:
+      - name: order_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+          title: Order Id
+      - name: X-Expected-Version
+        in: header
+        required: false
+        schema:
+          anyOf:
+          - type: integer
+            minimum: 1
+          - type: 'null'
+          title: X-Expected-Version
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/OrderItemCreate'
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OrderResponse'
+          headers:
+            X-Aggregate-Version:
+              schema:
+                type: integer
+                minimum: 1
+              description: Versión secuencial del agregado
+        '404':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BusinessError'
+          description: Not Found
+        '409':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BusinessError'
+          description: Conflict
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+        '503':
+          description: Persistencia no disponible
+  /admin/rebuild-projections:
+    post:
+      tags:
+      - Admin
+      summary: Rebuild
+      operationId: rebuild_admin_rebuild_projections_post
+      parameters:
+      - name: X-Admin-Key
+        in: header
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: X-Admin-Key
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
+        '403':
+          description: Clave administrativa inválida
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /health:
+    get:
+      summary: Health
+      operationId: health_health_get
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HealthResponse'
+        '503':
+          description: Dependencias no disponibles
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HealthResponse'
+components:
+  schemas:
+    BusinessError:
+      properties:
+        code:
+          type: string
+          title: Code
+        message:
+          type: string
+          title: Message
+      type: object
+      required:
+      - code
+      - message
+      title: BusinessError
+    CancelRequest:
+      properties:
+        reason:
+          type: string
+          maxLength: 500
+          title: Reason
+          default: ''
+      additionalProperties: false
+      type: object
+      title: CancelRequest
+    ChangeStatusRequest:
+      properties:
+        new_status:
+          type: string
+          enum:
+          - confirmed
+          - processing
+          - shipped
+          - delivered
+          title: New Status
+      additionalProperties: false
+      type: object
+      required:
+      - new_status
+      title: ChangeStatusRequest
+    HTTPValidationError:
+      properties:
+        detail:
+          items:
+            $ref: '#/components/schemas/ValidationError'
+          type: array
+          title: Detail
+      type: object
+      title: HTTPValidationError
+    HealthResponse:
+      properties:
+        status:
+          type: string
+          enum:
+          - healthy
+          - unhealthy
+          title: Status
+        service:
+          type: string
+          enum:
+          - order-service
+          - inventory-service
+          title: Service
+      type: object
+      required:
+      - status
+      - service
+      title: HealthResponse
+    OrderCreate:
+      properties:
+        customer_id:
+          type: string
+          format: uuid
+          title: Customer Id
+        items:
+          items:
+            $ref: '#/components/schemas/OrderItemCreate'
+          type: array
+          maxItems: 100
+          minItems: 1
+          title: Items
+      additionalProperties: false
+      type: object
+      required:
+      - customer_id
+      - items
+      title: OrderCreate
+    OrderItemCreate:
+      properties:
+        product_id:
+          type: string
+          format: uuid
+          title: Product Id
+        quantity:
+          type: integer
+          maximum: 1000.0
+          minimum: 1.0
+          title: Quantity
+        unit_price:
+          type: string
+          pattern: ^([1-9][0-9]{0,5}\.[0-9]{2}|0\.(0[1-9]|[1-9][0-9]))$
+          title: Unit Price
+      additionalProperties: false
+      type: object
+      required:
+      - product_id
+      - quantity
+      - unit_price
+      title: OrderItemCreate
+    OrderItemResponse:
+      properties:
+        product_id:
+          type: string
+          format: uuid
+          title: Product Id
+        quantity:
+          type: integer
+          maximum: 1000.0
+          minimum: 1.0
+          title: Quantity
+        unit_price:
+          type: string
+          pattern: ^([1-9][0-9]{0,5}\.[0-9]{2}|0\.(0[1-9]|[1-9][0-9]))$
+          title: Unit Price
+        subtotal:
+          type: string
+          pattern: ^[0-9]+\.[0-9]{2}$
+          title: Subtotal
+      additionalProperties: false
+      type: object
+      required:
+      - product_id
+      - quantity
+      - unit_price
+      - subtotal
+      title: OrderItemResponse
+    OrderResponse:
+      properties:
+        id:
+          type: string
+          format: uuid
+          title: Id
+        customer_id:
+          type: string
+          format: uuid
+          title: Customer Id
+        status:
+          $ref: '#/components/schemas/OrderStatus'
+        items:
+          items:
+            $ref: '#/components/schemas/OrderItemResponse'
+          type: array
+          title: Items
+        total:
+          type: string
+          pattern: ^[0-9]+\.[0-9]{2}$
+          title: Total
+        created_at:
+          type: string
+          format: date-time
+          title: Created At
+      type: object
+      required:
+      - id
+      - customer_id
+      - status
+      - items
+      - total
+      - created_at
+      title: OrderResponse
+    OrderStatus:
+      type: string
+      enum:
+      - pending
+      - confirmed
+      - processing
+      - shipped
+      - delivered
+      - cancelled
+      title: OrderStatus
+    StockResponse:
+      properties:
+        product_id:
+          type: string
+          format: uuid
+          title: Product Id
+        available:
+          anyOf:
+          - type: boolean
+          - type: 'null'
+          title: Available
+        quantity:
+          anyOf:
+          - type: integer
+          - type: 'null'
+          title: Quantity
+        source:
+          type: string
+          title: Source
+        reason:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Reason
+        attempts:
+          type: integer
+          title: Attempts
+          default: 0
+      type: object
+      required:
+      - product_id
+      - available
+      - quantity
+      - source
+      title: StockResponse
+    ValidationError:
+      properties:
+        loc:
+          items:
+            anyOf:
+            - type: string
+            - type: integer
+          type: array
+          title: Location
+        msg:
+          type: string
+          title: Message
+        type:
+          type: string
+          title: Error Type
+      type: object
+      required:
+      - loc
+      - msg
+      - type
+      title: ValidationError

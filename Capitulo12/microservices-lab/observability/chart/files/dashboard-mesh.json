@@ -1,0 +1,154 @@
+{
+  "uid": "lab10-mesh",
+  "title": "Lab 10 \u00b7 Istio por versi\u00f3n",
+  "schemaVersion": 39,
+  "version": 1,
+  "editable": false,
+  "refresh": "10s",
+  "time": {
+    "from": "now-15m",
+    "to": "now"
+  },
+  "panels": [
+    {
+      "id": 1,
+      "title": "Tr\u00e1fico Orders por versi\u00f3n",
+      "type": "timeseries",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum by (destination_version) (rate(istio_requests_total{reporter=\"destination\",destination_canonical_service=\"order-service\"}[2m]))",
+          "legendFormat": "{{destination_version}} {{instance}}"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "reqps"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 0,
+        "w": 12,
+        "h": 8
+      }
+    },
+    {
+      "id": 2,
+      "title": "Errores 5xx Orders",
+      "type": "timeseries",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "(sum by (destination_version) (rate(istio_requests_total{reporter=\"destination\",destination_canonical_service=\"order-service\",response_code=~\"5..\"}[2m])) or on(destination_version) (0 * sum by (destination_version) (rate(istio_requests_total{reporter=\"destination\",destination_canonical_service=\"order-service\"}[2m])))) / sum by (destination_version) (rate(istio_requests_total{reporter=\"destination\",destination_canonical_service=\"order-service\"}[2m]))",
+          "legendFormat": "{{destination_version}} {{instance}}"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percentunit"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "x": 12,
+        "y": 0,
+        "w": 12,
+        "h": 8
+      }
+    },
+    {
+      "id": 3,
+      "title": "P99 Orders",
+      "type": "timeseries",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "histogram_quantile(0.99, sum by (le,destination_version) (rate(istio_request_duration_milliseconds_bucket{reporter=\"destination\",destination_canonical_service=\"order-service\"}[2m]))) / 1000",
+          "legendFormat": "{{destination_version}} {{instance}}"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 8,
+        "w": 12,
+        "h": 8
+      }
+    },
+    {
+      "id": 4,
+      "title": "Memoria proxy / l\u00edmite configurado",
+      "type": "timeseries",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "envoy_server_memory_allocated{job=\"microservices\"} / (256 * 1024 * 1024)",
+          "legendFormat": "{{destination_version}} {{instance}}"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percentunit"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "x": 12,
+        "y": 8,
+        "w": 12,
+        "h": 8
+      }
+    },
+    {
+      "id": 5,
+      "title": "Tr\u00e1fico Inventory blue/green",
+      "type": "timeseries",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum by (destination_version) (rate(istio_requests_total{reporter=\"destination\",destination_canonical_service=\"inventory-service\"}[2m]))",
+          "legendFormat": "{{destination_version}} {{instance}}"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "reqps"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 16,
+        "w": 12,
+        "h": 8
+      }
+    }
+  ]
+}

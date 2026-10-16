@@ -1,1602 +1,380 @@
-# 4 Laboratorio: instrumentar servicios Python con OpenTelemetry y visualizar métricas
-
-## Metadata
-
-| Campo | Valor |
-|-------|-------|
-| **Duración** | 66 minutos |
-| **Complejidad** | Alta |
-| **Nivel Bloom** | Aplicar |
-| **Tecnologías** | OpenTelemetry SDK Python 1.25.0, OpenTelemetry Collector 0.102.1, Prometheus 2.53.0, Grafana 11.1.0, Jaeger 1.58.0, prometheus-fastapi-instrumentator 7.0.0 |
-
-## Descripción General
-
-En este laboratorio construirás un pipeline de observabilidad completo que integra los tres pilares — logs correlacionados, métricas y tracing distribuido — para tus microservicios FastAPI. Desplegarás OpenTelemetry Collector, Prometheus, Grafana y Jaeger en Kubernetes, instrumentarás los servicios con auto-instrumentación y spans manuales, configurarás propagación de contexto W3C TraceContext entre servicios, y definirás SLOs con alertas en Alertmanager.
-
-## Objetivos de Aprendizaje
-
-- [ ] Desplegar el stack de observabilidad (OTel Collector, Prometheus, Grafana, Jaeger) en namespaces dedicados de Kubernetes
-- [ ] Instrumentar microservicios FastAPI con OpenTelemetry SDK para generar trazas distribuidas con propagación W3C TraceContext
-- [ ] Exponer métricas RED (Rate, Errors, Duration) usando prometheus-fastapi-instrumentator y crear dashboards en Grafana
-- [ ] Implementar logging estructurado JSON correlacionado con trace_id y span_id
-- [ ] Configurar alertas de SLO (latencia p99 < 500ms, error rate < 1%) en Prometheus Alertmanager
-
-## Prerrequisitos
-
-### Conocimiento
-
-- Conceptos de los tres pilares de observabilidad (logs, métricas, tracing)
-- Familiaridad con métricas RED (Rate, Errors, Duration)
-- Experiencia básica con Helm charts y manifiestos Kubernetes
-- Labs 06-00-01 y 07-00-01 completados (microservicios con Traefik y Vault operativos)
-
-### Acceso y Software
-
-| Componente | Versión | Propósito |
-|---|---|---|
-| minikube/kind | 1.33+ | Clúster Kubernetes local |
-| kubectl | 1.30+ | Gestión del clúster |
-| Helm | 3.15.2 | Despliegue de charts |
-| Python | 3.12.3 | Runtime de servicios |
-| Docker Engine | 26.1.3 | Contenedores |
-
-### Repositorios Helm requeridos
-
-```bash
-helm repo add open-telemetry https://open-telemetry.github.io/opentelemetry-helm-charts
-helm repo add prometheus-community https://prometheus-community.github.io/helm-charts
-helm repo add jaegertracing https://jaegertracing.github.io/helm-charts
-helm repo add grafana https://grafana.github.io/helm-charts
-helm repo update
-```
-
-## Entorno del Laboratorio
-
-### Estructura de directorios
-
-```
-~/microservices-lab/observability/
-├── otel-collector/
-│   └── values.yaml
-├── prometheus/
-│   ├── values.yaml
-│   └── alerting-rules.yaml
-├── grafana/
-│   ├── values.yaml
-│   └── dashboards/
-│       └── microservices-red.json
-├── jaeger/
-│   └── values.yaml
-└── instrumentation/
-    ├── tracing.py
-    ├── metrics.py
-    └── logging_config.py
-```
-
-### Preparación inicial
-
-```bash
-# Crear directorio base
-mkdir -p ~/microservices-lab/observability/{otel-collector,prometheus,grafana/dashboards,jaeger,instrumentation}
-cd ~/microservices-lab/observability
-
-# Crear namespaces en Kubernetes
-kubectl create namespace observability --dry-run=client -o yaml | kubectl apply -f -
-kubectl create namespace monitoring --dry-run=client -o yaml | kubectl apply -f -
-```
-
----
-
-## Paso 1: Desplegar Jaeger para almacenamiento de trazas
-
-**Objetivo:** Instalar Jaeger 1.58.0 en el namespace `observability` como backend de trazas distribuidas.
-
-### Instrucciones
-
-1. Crea el archivo de valores para Jaeger:
-
-```bash
-cat > ~/microservices-lab/observability/jaeger/values.yaml << 'EOF'
-provisionDataStore:
-  cassandra: false
-allInOne:
-  enabled: true
-  image:
-    tag: "1.58.0"
-  resources:
-    limits:
-      cpu: 500m
-      memory: 512Mi
-    requests:
-      cpu: 100m
-      memory: 256Mi
-  extraEnv:
-    - name: COLLECTOR_OTLP_ENABLED
-      value: "true"
-storage:
-  type: memory
-agent:
-  enabled: false
-collector:
-  enabled: false
-query:
-  enabled: false
-EOF
-```
-
-2. Instala el chart de Jaeger:
-
-```bash
-helm install jaeger jaegertracing/jaeger \
-  --namespace observability \
-  --values ~/microservices-lab/observability/jaeger/values.yaml \
-  --wait --timeout 120s
-```
-
-3. Verifica el despliegue:
-
-```bash
-kubectl get pods -n observability -l app.kubernetes.io/name=jaeger
-```
-
-### Salida esperada
-
-```
-NAME                              READY   STATUS    RESTARTS   AGE
-jaeger-0                          1/1     Running   0          45s
-```
-
-### Verificación
-
-```bash
-kubectl port-forward -n observability svc/jaeger-query 16686:16686 &
-curl -s http://localhost:16686/api/services | python3 -m json.tool | head -5
-kill %1 2>/dev/null
-```
-
-Debes ver una respuesta JSON con la clave `"data"`.
-
----
-
-## Paso 2: Desplegar OpenTelemetry Collector
-
-**Objetivo:** Configurar el OTel Collector 0.102.1 con receivers OTLP, processors batch/memory_limiter y exporters hacia Jaeger y Prometheus.
-
-### Instrucciones
-
-1. Crea la configuración del Collector:
-
-```bash
-cat > ~/microservices-lab/observability/otel-collector/values.yaml << 'EOF'
-mode: deployment
-image:
-  tag: "0.102.1"
-resources:
-  limits:
-    cpu: 500m
-    memory: 512Mi
-  requests:
-    cpu: 100m
-    memory: 256Mi
-
-config:
-  receivers:
-    otlp:
-      protocols:
-        grpc:
-          endpoint: 0.0.0.0:4317
-        http:
-          endpoint: 0.0.0.0:4318
-
-  processors:
-    batch:
-      timeout: 5s
-      send_batch_size: 512
-    memory_limiter:
-      check_interval: 5s
-      limit_mib: 400
-      spike_limit_mib: 100
-
-  exporters:
-    otlp/jaeger:
-      endpoint: jaeger-collector.observability.svc.cluster.local:4317
-      tls:
-        insecure: true
-    prometheus:
-      endpoint: 0.0.0.0:8889
-      namespace: otel
-      send_timestamps: true
-      metric_expiration: 5m
-
-  service:
-    pipelines:
-      traces:
-        receivers: [otlp]
-        processors: [memory_limiter, batch]
-        exporters: [otlp/jaeger]
-      metrics:
-        receivers: [otlp]
-        processors: [memory_limiter, batch]
-        exporters: [prometheus]
-
-ports:
-  otlp:
-    enabled: true
-    containerPort: 4317
-    servicePort: 4317
-    protocol: TCP
-  otlp-http:
-    enabled: true
-    containerPort: 4318
-    servicePort: 4318
-    protocol: TCP
-  prometheus:
-    enabled: true
-    containerPort: 8889
-    servicePort: 8889
-    protocol: TCP
-EOF
-```
-
-2. Instala el OTel Collector:
-
-```bash
-helm install otel-collector open-telemetry/opentelemetry-collector \
-  --namespace observability \
-  --values ~/microservices-lab/observability/otel-collector/values.yaml \
-  --wait --timeout 120s
-```
-
-3. Verifica que el Collector está operativo:
-
-```bash
-kubectl get pods -n observability -l app.kubernetes.io/name=opentelemetry-collector
-kubectl get svc -n observability | grep otel
-```
-
-### Salida esperada
-
-```
-NAME                                        READY   STATUS    RESTARTS   AGE
-otel-collector-opentelemetry-collector-xxx   1/1     Running   0          30s
-```
-
-### Verificación
-
-```bash
-# Verificar que los puertos están escuchando
-kubectl exec -n observability deploy/otel-collector-opentelemetry-collector -- \
-  wget -qO- http://localhost:13133/
-```
-
-Debe responder con `{"status":"Server available"...}`.
-
----
-
-## Paso 3: Desplegar Prometheus y Alertmanager
-
-**Objetivo:** Instalar Prometheus 2.53.0 con reglas de alertas para SLOs de latencia y error rate.
-
-### Instrucciones
-
-1. Crea las reglas de alertas:
-
-```bash
-cat > ~/microservices-lab/observability/prometheus/alerting-rules.yaml << 'EOF'
-groups:
-  - name: microservices-slos
-    rules:
-      - alert: HighLatencyP99
-        expr: |
-          histogram_quantile(0.99,
-            sum(rate(http_request_duration_seconds_bucket{service=~"order-service|inventory-service"}[5m])) by (le, service)
-          ) > 0.5
-        for: 2m
-        labels:
-          severity: warning
-          team: platform
-        annotations:
-          summary: "Latencia p99 alta en {{ $labels.service }}"
-          description: "La latencia p99 de {{ $labels.service }} es {{ $value }}s (SLO: <500ms) durante los últimos 2 minutos."
-
-      - alert: HighErrorRate
-        expr: |
-          sum(rate(http_requests_total{status_code=~"5..",service=~"order-service|inventory-service"}[5m])) by (service)
-          /
-          sum(rate(http_requests_total{service=~"order-service|inventory-service"}[5m])) by (service)
-          > 0.01
-        for: 5m
-        labels:
-          severity: critical
-          team: platform
-        annotations:
-          summary: "Error rate alto en {{ $labels.service }}"
-          description: "El error rate de {{ $labels.service }} es {{ $value | humanizePercentage }} (SLO: <1%) durante los últimos 5 minutos."
-EOF
-```
-
-2. Crea el archivo de valores de Prometheus:
-
-```bash
-cat > ~/microservices-lab/observability/prometheus/values.yaml << 'EOF'
-server:
-  image:
-    tag: "v2.53.0"
-  resources:
-    limits:
-      cpu: 500m
-      memory: 1Gi
-    requests:
-      cpu: 200m
-      memory: 512Mi
-  retention: "7d"
-  global:
-    scrape_interval: 15s
-    evaluation_interval: 15s
-
-alertmanager:
-  enabled: true
-  config:
-    global:
-      resolve_timeout: 5m
-    route:
-      group_by: ['alertname', 'service']
-      group_wait: 10s
-      group_interval: 5m
-      repeat_interval: 3h
-      receiver: 'default'
-    receivers:
-      - name: 'default'
-        webhook_configs:
-          - url: 'http://localhost:9093/api/v1/alerts'
-
-serverFiles:
-  alerting_rules.yml:
-    groups:
-      - name: microservices-slos
-        rules:
-          - alert: HighLatencyP99
-            expr: |
-              histogram_quantile(0.99,
-                sum(rate(http_request_duration_seconds_bucket[5m])) by (le, service)
-              ) > 0.5
-            for: 2m
-            labels:
-              severity: warning
-            annotations:
-              summary: "Latencia p99 alta en {{ $labels.service }}"
-          - alert: HighErrorRate
-            expr: |
-              sum(rate(http_requests_total{status_code=~"5.."}[5m])) by (service)
-              /
-              sum(rate(http_requests_total[5m])) by (service)
-              > 0.01
-            for: 5m
-            labels:
-              severity: critical
-            annotations:
-              summary: "Error rate alto en {{ $labels.service }}"
-
-extraScrapeConfigs: |
-  - job_name: 'otel-collector'
-    static_configs:
-      - targets: ['otel-collector-opentelemetry-collector.observability.svc.cluster.local:8889']
-  - job_name: 'microservices'
-    kubernetes_sd_configs:
-      - role: pod
-        namespaces:
-          names: ['default']
-    relabel_configs:
-      - source_labels: [__meta_kubernetes_pod_annotation_prometheus_io_scrape]
-        action: keep
-        regex: true
-      - source_labels: [__meta_kubernetes_pod_annotation_prometheus_io_port]
-        action: replace
-        target_label: __address__
-        regex: (.+)
-        replacement: ${1}
-EOF
-```
-
-3. Instala Prometheus:
-
-```bash
-helm install prometheus prometheus-community/prometheus \
-  --namespace monitoring \
-  --values ~/microservices-lab/observability/prometheus/values.yaml \
-  --wait --timeout 180s
-```
-
-4. Verifica:
-
-```bash
-kubectl get pods -n monitoring -l app.kubernetes.io/name=prometheus
-```
-
-### Salida esperada
-
-```
-NAME                                             READY   STATUS    RESTARTS   AGE
-prometheus-server-xxx                            2/2     Running   0          60s
-prometheus-alertmanager-xxx                      1/1     Running   0          60s
-```
-
-### Verificación
-
-```bash
-kubectl port-forward -n monitoring svc/prometheus-server 9090:80 &
-sleep 2
-curl -s http://localhost:9090/api/v1/status/config | python3 -c "import sys,json; d=json.load(sys.stdin); print('Status:', d['status'])"
-kill %1 2>/dev/null
-```
-
-Debe imprimir `Status: success`.
-
----
-
-## Paso 4: Desplegar Grafana con dashboard preconfigurado
-
-**Objetivo:** Instalar Grafana 11.1.0 con datasource Prometheus y un dashboard RED para microservicios.
-
-### Instrucciones
-
-1. Crea el dashboard JSON:
-
-```bash
-cat > ~/microservices-lab/observability/grafana/dashboards/microservices-red.json << 'EOF'
-{
-  "annotations": {"list": []},
-  "title": "Microservices RED Metrics",
-  "uid": "msvc-red-001",
-  "version": 1,
-  "panels": [
-    {
-      "id": 1,
-      "title": "Request Rate (RPS)",
-      "type": "timeseries",
-      "gridPos": {"h": 8, "w": 8, "x": 0, "y": 0},
-      "targets": [
-        {
-          "expr": "sum(rate(http_requests_total[5m])) by (service)",
-          "legendFormat": "{{service}}"
-        }
-      ]
-    },
-    {
-      "id": 2,
-      "title": "Error Rate (%)",
-      "type": "timeseries",
-      "gridPos": {"h": 8, "w": 8, "x": 8, "y": 0},
-      "targets": [
-        {
-          "expr": "sum(rate(http_requests_total{status_code=~\"5..\"}[5m])) by (service) / sum(rate(http_requests_total[5m])) by (service) * 100",
-          "legendFormat": "{{service}}"
-        }
-      ]
-    },
-    {
-      "id": 3,
-      "title": "Latency p99 (seconds)",
-      "type": "timeseries",
-      "gridPos": {"h": 8, "w": 8, "x": 16, "y": 0},
-      "targets": [
-        {
-          "expr": "histogram_quantile(0.99, sum(rate(http_request_duration_seconds_bucket[5m])) by (le, service))",
-          "legendFormat": "{{service}} p99"
-        }
-      ]
-    }
-  ],
-  "schemaVersion": 39,
-  "time": {"from": "now-1h", "to": "now"},
-  "refresh": "10s"
-}
-EOF
-```
-
-2. Crea los valores de Grafana:
-
-```bash
-cat > ~/microservices-lab/observability/grafana/values.yaml << 'EOF'
-image:
-  tag: "11.1.0"
-resources:
-  limits:
-    cpu: 300m
-    memory: 512Mi
-  requests:
-    cpu: 100m
-    memory: 256Mi
-
-adminUser: admin
-adminPassword: grafana_admin_2024
-
-datasources:
-  datasources.yaml:
-    apiVersion: 1
-    datasources:
-      - name: Prometheus
-        type: prometheus
-        url: http://prometheus-server.monitoring.svc.cluster.local:80
-        access: proxy
-        isDefault: true
-      - name: Jaeger
-        type: jaeger
-        url: http://jaeger-query.observability.svc.cluster.local:16686
-        access: proxy
-
-dashboardProviders:
-  dashboardproviders.yaml:
-    apiVersion: 1
-    providers:
-      - name: 'default'
-        orgId: 1
-        folder: 'Microservices'
-        type: file
-        disableDeletion: false
-        editable: true
-        options:
-          path: /var/lib/grafana/dashboards/default
-
-dashboardsConfigMaps:
-  default: grafana-dashboards
-EOF
-```
-
-3. Crea el ConfigMap con el dashboard:
-
-```bash
-kubectl create configmap grafana-dashboards \
-  --from-file=microservices-red.json=~/microservices-lab/observability/grafana/dashboards/microservices-red.json \
-  --namespace monitoring \
-  --dry-run=client -o yaml | kubectl apply -f -
-```
-
-4. Instala Grafana:
-
-```bash
-helm install grafana grafana/grafana \
-  --namespace monitoring \
-  --values ~/microservices-lab/observability/grafana/values.yaml \
-  --wait --timeout 120s
-```
-
-### Salida esperada
-
-```
-NAME                       READY   STATUS    RESTARTS   AGE
-grafana-xxx                1/1     Running   0          40s
-```
-
-### Verificación
-
-```bash
-kubectl port-forward -n monitoring svc/grafana 3000:80 &
-sleep 2
-curl -s -u admin:grafana_admin_2024 http://localhost:3000/api/datasources | python3 -c "import sys,json; ds=json.load(sys.stdin); [print(f'  - {d[\"name\"]}: {d[\"type\"]}') for d in ds]"
-kill %1 2>/dev/null
-```
-
-Debe listar los datasources Prometheus y Jaeger.
-
----
-
-## Paso 5: Instrumentar microservicios con OpenTelemetry SDK
-
-**Objetivo:** Añadir tracing distribuido con auto-instrumentación FastAPI y spans manuales en lógica de negocio.
-
-### Instrucciones
-
-1. Crea el módulo de configuración de tracing:
-
-```bash
-cat > ~/microservices-lab/observability/instrumentation/tracing.py << 'EOF'
-# tracing.py - Configuración de OpenTelemetry para microservicios FastAPI
-from opentelemetry import trace
-from opentelemetry.sdk.trace import TracerProvider
-from opentelemetry.sdk.trace.export import BatchSpanProcessor
-from opentelemetry.exporter.otlp.proto.grpc.trace_exporter import OTLPSpanExporter
-from opentelemetry.sdk.resources import Resource, SERVICE_NAME, SERVICE_VERSION
-from opentelemetry.instrumentation.fastapi import FastAPIInstrumentor
-from opentelemetry.propagate import set_global_textmap
-from opentelemetry.propagators.composite import CompositePropagator
-from opentelemetry.trace.propagation.tracecontext import TraceContextTextMapPropagator
-from opentelemetry.baggage.propagation import W3CBaggagePropagator
-
-
-def configure_tracing(app, service_name: str, service_version: str = "1.0.0"):
-    """
-    Configura OpenTelemetry tracing para una aplicación FastAPI.
-    
-    Args:
-        app: Instancia de FastAPI
-        service_name: Nombre del servicio (e.g., 'order-service')
-        service_version: Versión semver del servicio
-    """
-    # Recurso que identifica al servicio
-    resource = Resource.create({
-        SERVICE_NAME: service_name,
-        SERVICE_VERSION: service_version,
-        "deployment.environment": "lab",
-    })
-
-    # Configurar el proveedor de trazas
-    provider = TracerProvider(resource=resource)
-    
-    # Exportador OTLP hacia el Collector
-    otlp_exporter = OTLPSpanExporter(
-        endpoint="otel-collector-opentelemetry-collector.observability.svc.cluster.local:4317",
-        insecure=True,
-    )
-    
-    # Procesador batch para envío eficiente
-    span_processor = BatchSpanProcessor(
-        otlp_exporter,
-        max_queue_size=2048,
-        max_export_batch_size=512,
-        schedule_delay_millis=5000,
-    )
-    provider.add_span_processor(span_processor)
-    
-    # Registrar el proveedor globalmente
-    trace.set_tracer_provider(provider)
-    
-    # Configurar propagación W3C TraceContext
-    set_global_textmap(CompositePropagator([
-        TraceContextTextMapPropagator(),
-        W3CBaggagePropagator(),
-    ]))
-    
-    # Auto-instrumentar FastAPI
-    FastAPIInstrumentor.instrument_app(app)
-    
-    return trace.get_tracer(service_name)
-EOF
-```
-
-2. Crea el módulo de métricas con prometheus-fastapi-instrumentator:
-
-```bash
-cat > ~/microservices-lab/observability/instrumentation/metrics.py << 'EOF'
-# metrics.py - Métricas Prometheus para FastAPI
-from prometheus_fastapi_instrumentator import Instrumentator
-from prometheus_fastapi_instrumentator.metrics import Info
-from prometheus_client import Counter, Histogram
-
-
-# Métricas personalizadas de negocio
-orders_created_total = Counter(
-    "business_orders_created_total",
-    "Total de órdenes creadas exitosamente",
-    ["status"]
-)
-
-inventory_checks_duration = Histogram(
-    "business_inventory_check_duration_seconds",
-    "Duración de verificaciones de inventario",
-    buckets=[0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1.0]
-)
-
-
-def setup_metrics(app, service_name: str):
-    """
-    Configura prometheus-fastapi-instrumentator en la app.
-    Expone métricas en /metrics automáticamente.
-    """
-    instrumentator = Instrumentator(
-        should_group_status_codes=False,
-        should_ignore_untemplated=True,
-        should_respect_env_var=False,
-        excluded_handlers=["/health", "/ready", "/metrics"],
-        env_var_name="ENABLE_METRICS",
-    )
-    
-    # Métrica adicional: tamaño de respuesta
-    def response_size_metric(info: Info):
-        pass  # instrumentator ya incluye esto por defecto
-    
-    instrumentator.add(response_size_metric)
-    instrumentator.instrument(app)
-    instrumentator.expose(app, endpoint="/metrics", include_in_schema=False)
-    
-    return instrumentator
-EOF
-```
-
-3. Crea el módulo de logging estructurado correlacionado:
-
-```bash
-cat > ~/microservices-lab/observability/instrumentation/logging_config.py << 'EOF'
-# logging_config.py - Logging estructurado con correlación de trazas
-import logging
-import json
-import sys
-from datetime import datetime, timezone
-from opentelemetry import trace
-
-
-class StructuredJsonFormatter(logging.Formatter):
-    """Formatter que emite logs en JSON con trace_id y span_id."""
-    
-    def __init__(self, service_name: str):
-        super().__init__()
-        self.service_name = service_name
-    
-    def format(self, record: logging.LogRecord) -> str:
-        # Obtener contexto de traza actual
-        span = trace.get_current_span()
-        span_context = span.get_span_context()
-        
-        trace_id = "0" * 32
-        span_id = "0" * 16
-        
-        if span_context.is_valid:
-            trace_id = format(span_context.trace_id, '032x')
-            span_id = format(span_context.span_id, '016x')
-        
-        log_entry = {
-            "timestamp": datetime.now(timezone.utc).isoformat(),
-            "level": record.levelname,
-            "service": self.service_name,
-            "logger": record.name,
-            "message": record.getMessage(),
-            "trace_id": trace_id,
-            "span_id": span_id,
-            "module": record.module,
-            "function": record.funcName,
-            "line": record.lineno,
-        }
-        
-        # Incluir excepción si existe
-        if record.exc_info and record.exc_info[0] is not None:
-            log_entry["error"] = {
-                "type": record.exc_info[0].__name__,
-                "message": str(record.exc_info[1]),
-                "traceback": self.formatException(record.exc_info),
-            }
-        
-        # Incluir campos extra
-        for key, value in record.__dict__.items():
-            if key.startswith("ctx_"):
-                log_entry[key[4:]] = value
-        
-        return json.dumps(log_entry, ensure_ascii=False)
-
-
-def configure_logging(service_name: str, level: str = "INFO"):
-    """
-    Configura logging estructurado JSON con correlación de trazas.
-    """
-    root_logger = logging.getLogger()
-    root_logger.setLevel(getattr(logging, level.upper()))
-    
-    # Limpiar handlers existentes
-    root_logger.handlers.clear()
-    
-    # Handler stdout con formato JSON
-    handler = logging.StreamHandler(sys.stdout)
-    handler.setFormatter(StructuredJsonFormatter(service_name))
-    root_logger.addHandler(handler)
-    
-    # Reducir verbosidad de librerías externas
-    logging.getLogger("uvicorn.access").setLevel(logging.WARNING)
-    logging.getLogger("opentelemetry").setLevel(logging.WARNING)
-    
-    return logging.getLogger(service_name)
-EOF
-```
-
-4. Crea la aplicación de ejemplo que integra los tres módulos (order-service):
-
-```bash
-cat > ~/microservices-lab/observability/instrumentation/order_service_example.py << 'EOF'
-# order_service_example.py - Ejemplo de integración completa
-from fastapi import FastAPI, HTTPException, Request
-from pydantic import BaseModel
-from opentelemetry import trace
-import httpx
-import logging
-import time
-
-# Importar módulos de instrumentación
-from tracing import configure_tracing
-from metrics import setup_metrics, orders_created_total, inventory_checks_duration
-from logging_config import configure_logging
-
-app = FastAPI(title="Order Service", version="1.0.0")
-
-# 1. Configurar logging estructurado
-logger = configure_logging("order-service")
-
-# 2. Configurar tracing con OpenTelemetry
-tracer = configure_tracing(app, "order-service", "1.0.0")
-
-# 3. Configurar métricas Prometheus
-setup_metrics(app, "order-service")
-
-
-class OrderCreate(BaseModel):
-    product_id: str
-    quantity: int
-
-
-@app.get("/health")
-async def health():
-    return {"status": "healthy"}
-
-
-@app.post("/api/v1/orders")
-async def create_order(order: OrderCreate):
-    """Crear una orden con tracing manual en lógica de negocio."""
-    logger.info("Recibida solicitud de creación de orden",
-                extra={"ctx_product_id": order.product_id, "ctx_quantity": order.quantity})
-    
-    # Span manual para verificación de inventario
-    with tracer.start_as_current_span("check_inventory") as span:
-        span.set_attribute("product.id", order.product_id)
-        span.set_attribute("order.quantity", order.quantity)
-        
-        start = time.perf_counter()
-        inventory_available = await check_inventory(order.product_id, order.quantity)
-        duration = time.perf_counter() - start
-        inventory_checks_duration.observe(duration)
-        
-        if not inventory_available:
-            span.set_attribute("inventory.available", False)
-            span.set_status(trace.StatusCode.ERROR, "Inventario insuficiente")
-            logger.warning("Inventario insuficiente",
-                          extra={"ctx_product_id": order.product_id})
-            raise HTTPException(status_code=409, detail="Inventario insuficiente")
-        
-        span.set_attribute("inventory.available", True)
-    
-    # Span manual para persistencia
-    with tracer.start_as_current_span("persist_order") as span:
-        order_id = f"ORD-{int(time.time())}"
-        span.set_attribute("order.id", order_id)
-        # Simular escritura en DB
-        await simulate_db_write(order_id)
-        
-        orders_created_total.labels(status="success").inc()
-        logger.info("Orden creada exitosamente",
-                    extra={"ctx_order_id": order_id})
-    
-    return {"order_id": order_id, "status": "created"}
-
-
-async def check_inventory(product_id: str, quantity: int) -> bool:
-    """Llamada al inventory-service con propagación de contexto."""
-    try:
-        async with httpx.AsyncClient() as client:
-            # httpx con OpenTelemetry propaga automáticamente las cabeceras W3C
-            response = await client.get(
-                f"http://inventory-service:8002/api/v1/inventory/{product_id}",
-                timeout=5.0,
-            )
-            if response.status_code == 200:
-                data = response.json()
-                return data.get("available_quantity", 0) >= quantity
-    except httpx.RequestError as e:
-        logger.error("Error al verificar inventario", exc_info=True)
-        # Fallback: asumir disponible para no bloquear
-        return True
-    return False
-
-
-async def simulate_db_write(order_id: str):
-    """Simula escritura en base de datos."""
-    import asyncio
-    await asyncio.sleep(0.02)  # Simular latencia de DB
-EOF
-```
-
-5. Copia los módulos de instrumentación al directorio del order-service:
-
-```bash
-cp ~/microservices-lab/observability/instrumentation/{tracing,metrics,logging_config}.py \
-   ~/microservices-lab/order-service/
-```
-
-6. Actualiza las dependencias del servicio:
-
-```bash
-cat >> ~/microservices-lab/order-service/requirements.txt << 'EOF'
-opentelemetry-sdk==1.25.0
-opentelemetry-api==1.25.0
-opentelemetry-instrumentation-fastapi==0.46b0
-opentelemetry-instrumentation-httpx==0.46b0
-opentelemetry-exporter-otlp-proto-grpc==1.25.0
-opentelemetry-propagator-b3==1.25.0
-prometheus-fastapi-instrumentator==7.0.0
-httpx==0.27.0
-EOF
-```
-
-### Salida esperada
-
-Los archivos deben existir en ambas ubicaciones:
-
-```bash
-ls ~/microservices-lab/order-service/{tracing,metrics,logging_config}.py
-```
-
-```
-/home/student/microservices-lab/order-service/tracing.py
-/home/student/microservices-lab/order-service/metrics.py
-/home/student/microservices-lab/order-service/logging_config.py
-```
-
-### Verificación
-
-```bash
-# Verificar sintaxis Python de los módulos
-python3 -c "import ast; [ast.parse(open(f).read()) for f in ['tracing.py','metrics.py','logging_config.py']]" \
-  && echo "✓ Todos los módulos tienen sintaxis válida"
-```
-
----
-
-## Paso 6: Configurar propagación W3C TraceContext entre servicios
-
-**Objetivo:** Implementar la propagación de contexto de trazas entre order-service e inventory-service mediante cabeceras W3C `traceparent`.
-
-### Instrucciones
-
-1. Crea el middleware de instrumentación HTTP para el inventory-service:
-
-```bash
-cat > ~/microservices-lab/inventory-service/tracing.py << 'EOF'
-# tracing.py para inventory-service - idéntico patrón
-from opentelemetry import trace
-from opentelemetry.sdk.trace import TracerProvider
-from opentelemetry.sdk.trace.export import BatchSpanProcessor
-from opentelemetry.exporter.otlp.proto.grpc.trace_exporter import OTLPSpanExporter
-from opentelemetry.sdk.resources import Resource, SERVICE_NAME, SERVICE_VERSION
-from opentelemetry.instrumentation.fastapi import FastAPIInstrumentor
-from opentelemetry.propagate import set_global_textmap
-from opentelemetry.propagators.composite import CompositePropagator
-from opentelemetry.trace.propagation.tracecontext import TraceContextTextMapPropagator
-from opentelemetry.baggage.propagation import W3CBaggagePropagator
-
-
-def configure_tracing(app, service_name: str, service_version: str = "1.0.0"):
-    resource = Resource.create({
-        SERVICE_NAME: service_name,
-        SERVICE_VERSION: service_version,
-        "deployment.environment": "lab",
-    })
-
-    provider = TracerProvider(resource=resource)
-    otlp_exporter = OTLPSpanExporter(
-        endpoint="otel-collector-opentelemetry-collector.observability.svc.cluster.local:4317",
-        insecure=True,
-    )
-    provider.add_span_processor(BatchSpanProcessor(otlp_exporter))
-    trace.set_tracer_provider(provider)
-
-    # W3C TraceContext propagation
-    set_global_textmap(CompositePropagator([
-        TraceContextTextMapPropagator(),
-        W3CBaggagePropagator(),
-    ]))
-
-    FastAPIInstrumentor.instrument_app(app)
-    return trace.get_tracer(service_name)
-EOF
-```
-
-2. Crea un script de validación de propagación de contexto:
-
-```bash
-cat > ~/microservices-lab/observability/instrumentation/test_propagation.py << 'EOF'
-#!/usr/bin/env python3
-"""Test de propagación W3C TraceContext entre servicios."""
-import httpx
-import asyncio
-import sys
-
-
-async def test_trace_propagation():
-    """Envía una request con traceparent y verifica que se propaga."""
-    # Simular un traceparent W3C válido
-    trace_id = "4bf92f3577b34da6a3ce929d0e0e4736"
-    parent_span_id = "00f067aa0ba902b7"
-    traceparent = f"00-{trace_id}-{parent_span_id}-01"
-    
-    headers = {
-        "traceparent": traceparent,
-        "Content-Type": "application/json",
-    }
-    
-    async with httpx.AsyncClient() as client:
-        try:
-            response = await client.post(
-                "http://localhost:8001/api/v1/orders",
-                json={"product_id": "PROD-001", "quantity": 1},
-                headers=headers,
-                timeout=10.0,
-            )
-            print(f"Status: {response.status_code}")
-            print(f"Response: {response.json()}")
-            
-            # Verificar que el trace_id se mantiene en la respuesta
-            resp_traceparent = response.headers.get("traceparent", "")
-            if trace_id in resp_traceparent:
-                print(f"✓ Trace ID propagado correctamente: {trace_id}")
-                return True
-            else:
-                print(f"⚠ Traceparent en respuesta: {resp_traceparent}")
-                return True  # El servicio puede no devolver traceparent
-                
-        except httpx.RequestError as e:
-            print(f"✗ Error de conexión: {e}")
-            return False
-
-
-if __name__ == "__main__":
-    result = asyncio.run(test_trace_propagation())
-    sys.exit(0 if result else 1)
-EOF
-chmod +x ~/microservices-lab/observability/instrumentation/test_propagation.py
-```
-
-3. Verifica que la instrumentación httpx propaga automáticamente las cabeceras:
-
-```bash
-cat > ~/microservices-lab/observability/instrumentation/verify_instrumentation.py << 'EOF'
-#!/usr/bin/env python3
-"""Verifica que los paquetes de instrumentación están instalados correctamente."""
-import importlib
-
-packages = [
-    ("opentelemetry.sdk", "1.25.0"),
-    ("opentelemetry.instrumentation.fastapi", "0.46b0"),
-    ("opentelemetry.exporter.otlp.proto.grpc", None),
-    ("opentelemetry.propagators.composite", None),
-    ("prometheus_fastapi_instrumentator", "7.0.0"),
-]
-
-all_ok = True
-for pkg, expected_version in packages:
-    try:
-        mod = importlib.import_module(pkg)
-        version = getattr(mod, "__version__", "installed")
-        status = "✓"
-    except ImportError:
-        version = "NOT FOUND"
-        status = "✗"
-        all_ok = False
-    print(f"  {status} {pkg}: {version}")
-
-print(f"\n{'✓ Todos los paquetes disponibles' if all_ok else '✗ Faltan paquetes'}")
-EOF
-python3 ~/microservices-lab/observability/instrumentation/verify_instrumentation.py
-```
-
-### Salida esperada
-
-```
-  ✓ opentelemetry.sdk: 1.25.0
-  ✓ opentelemetry.instrumentation.fastapi: 0.46b0
-  ✓ opentelemetry.exporter.otlp.proto.grpc: installed
-  ✓ opentelemetry.propagators.composite: installed
-  ✓ prometheus_fastapi_instrumentator: 7.0.0
-
-✓ Todos los paquetes disponibles
-```
-
-### Verificación
-
-La propagación W3C funciona cuando el `trace_id` generado en el primer servicio aparece en los spans del segundo servicio en Jaeger. Esto se validará completamente en el Paso 8.
-
----
-
-## Paso 7: Desplegar servicios instrumentados en Kubernetes
-
-**Objetivo:** Construir y desplegar los microservicios con la instrumentación de observabilidad activa.
-
-### Instrucciones
-
-1. Actualiza el Dockerfile del order-service para incluir las dependencias de OTel:
-
-```bash
-cat > ~/microservices-lab/order-service/Dockerfile.otel << 'EOF'
-FROM python:3.12.3-slim
-
-WORKDIR /app
-
-# Instalar dependencias
-COPY requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
-
-# Copiar código de la aplicación
-COPY . .
-
-# Variables de entorno para OpenTelemetry
-ENV OTEL_SERVICE_NAME=order-service
-ENV OTEL_EXPORTER_OTLP_ENDPOINT=http://otel-collector-opentelemetry-collector.observability.svc.cluster.local:4317
-ENV OTEL_TRACES_EXPORTER=otlp
-ENV OTEL_METRICS_EXPORTER=otlp
-ENV OTEL_PROPAGATORS=tracecontext,baggage
-
-EXPOSE 8001
-
-CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8001"]
-EOF
-```
-
-2. Construye la imagen (usando el registry de minikube):
-
-```bash
-eval $(minikube docker-env)
-docker build -t order-service:otel-v1 \
-  -f ~/microservices-lab/order-service/Dockerfile.otel \
-  ~/microservices-lab/order-service/
-```
-
-3. Crea el manifiesto de deployment con anotaciones para Prometheus scraping:
-
-```bash
-cat > ~/microservices-lab/observability/order-service-deployment.yaml << 'EOF'
-apiVersion: apps/v1
-kind: Deployment
-metadata:
-  name: order-service
-  namespace: default
-  labels:
-    app: order-service
-spec:
-  replicas: 1
-  selector:
-    matchLabels:
-      app: order-service
-  template:
-    metadata:
-      labels:
-        app: order-service
-      annotations:
-        prometheus.io/scrape: "true"
-        prometheus.io/port: "8001"
-        prometheus.io/path: "/metrics"
-    spec:
-      containers:
-        - name: order-service
-          image: order-service:otel-v1
-          imagePullPolicy: Never
-          ports:
-            - containerPort: 8001
-              name: http
-          env:
-            - name: OTEL_SERVICE_NAME
-              value: "order-service"
-            - name: OTEL_EXPORTER_OTLP_ENDPOINT
-              value: "http://otel-collector-opentelemetry-collector.observability.svc.cluster.local:4317"
-            - name: OTEL_PROPAGATORS
-              value: "tracecontext,baggage"
-          resources:
-            limits:
-              cpu: 300m
-              memory: 256Mi
-            requests:
-              cpu: 100m
-              memory: 128Mi
-          readinessProbe:
-            httpGet:
-              path: /health
-              port: 8001
-            initialDelaySeconds: 5
-            periodSeconds: 10
-          livenessProbe:
-            httpGet:
-              path: /health
-              port: 8001
-            initialDelaySeconds: 10
-            periodSeconds: 30
----
-apiVersion: v1
-kind: Service
-metadata:
-  name: order-service
-  namespace: default
-spec:
-  selector:
-    app: order-service
-  ports:
-    - port: 8001
-      targetPort: 8001
-      protocol: TCP
-  type: ClusterIP
-EOF
-```
-
-4. Aplica el deployment:
-
-```bash
-kubectl apply -f ~/microservices-lab/observability/order-service-deployment.yaml
-kubectl rollout status deployment/order-service --timeout=60s
-```
-
-### Salida esperada
-
-```
-deployment "order-service" successfully rolled out
-```
-
-### Verificación
-
-```bash
-# Verificar que el endpoint /metrics responde
-kubectl port-forward svc/order-service 8001:8001 &
-sleep 3
-curl -s http://localhost:8001/metrics | head -20
-kill %1 2>/dev/null
-```
-
-Debe mostrar métricas en formato Prometheus, incluyendo líneas como `http_requests_total` y `http_request_duration_seconds_bucket`.
-
----
-
-## Paso 8: Generar tráfico y validar el pipeline completo
-
-**Objetivo:** Generar tráfico de prueba, verificar trazas en Jaeger, métricas en Prometheus y visualización en Grafana.
-
-### Instrucciones
-
-1. Crea un script generador de tráfico:
-
-```bash
-cat > ~/microservices-lab/observability/generate_traffic.sh << 'SCRIPT'
-#!/bin/bash
-# Genera tráfico de prueba para validar observabilidad
-echo "=== Generando tráfico de prueba (60 requests) ==="
-
-ORDER_URL="http://localhost:8001"
-
-for i in $(seq 1 60); do
-    # Mezcla de requests exitosas y con errores
-    if [ $((i % 10)) -eq 0 ]; then
-        # Simular producto inexistente (error)
-        curl -s -X POST "$ORDER_URL/api/v1/orders" \
-          -H "Content-Type: application/json" \
-          -d '{"product_id": "INVALID", "quantity": 9999}' > /dev/null
-    else
-        # Request normal
-        curl -s -X POST "$ORDER_URL/api/v1/orders" \
-          -H "Content-Type: application/json" \
-          -d "{\"product_id\": \"PROD-$(printf '%03d' $((RANDOM % 10)))\", \"quantity\": $((RANDOM % 5 + 1))}" > /dev/null
-    fi
-    
-    # También generar GETs
-    curl -s "$ORDER_URL/health" > /dev/null
-    
-    sleep 0.5
-done
-
-echo "=== Tráfico generado. Esperando 15s para propagación... ==="
-sleep 15
-echo "=== Listo para verificar dashboards ==="
-SCRIPT
-chmod +x ~/microservices-lab/observability/generate_traffic.sh
-```
-
-2. Ejecuta el generador con port-forward activo:
-
-```bash
-kubectl port-forward svc/order-service 8001:8001 &
-PF_PID=$!
-sleep 2
-
-~/microservices-lab/observability/generate_traffic.sh
-
-kill $PF_PID 2>/dev/null
-```
-
-3. Verifica trazas en Jaeger:
-
-```bash
-kubectl port-forward -n observability svc/jaeger-query 16686:16686 &
-sleep 2
-
-# Buscar trazas del order-service
-TRACES=$(curl -s "http://localhost:16686/api/traces?service=order-service&limit=5" | \
-  python3 -c "import sys,json; d=json.load(sys.stdin); print(f'Trazas encontradas: {len(d.get(\"data\", []))}')")
-echo "$TRACES"
-
-kill %1 2>/dev/null
-```
-
-4. Verifica métricas en Prometheus:
-
-```bash
-kubectl port-forward -n monitoring svc/prometheus-server 9090:80 &
-sleep 2
-
-# Consultar métricas del servicio
-echo "--- Request Rate ---"
-curl -s "http://localhost:9090/api/v1/query?query=rate(http_requests_total\{service=\"order-service\"\}[5m])" | \
-  python3 -c "import sys,json; d=json.load(sys.stdin); results=d.get('data',{}).get('result',[]); print(f'Series: {len(results)}')"
-
-echo "--- Latencia p99 ---"
-curl -s "http://localhost:9090/api/v1/query?query=histogram_quantile(0.99,rate(http_request_duration_seconds_bucket[5m]))" | \
-  python3 -c "import sys,json; d=json.load(sys.stdin); results=d.get('data',{}).get('result',[]); [print(f'  {r[\"metric\"].get(\"service\",\"unknown\")}: {float(r[\"value\"][1]):.4f}s') for r in results]"
-
-kill %1 2>/dev/null
-```
-
-5. Verifica alertas configuradas:
-
-```bash
-kubectl port-forward -n monitoring svc/prometheus-server 9090:80 &
-sleep 2
-
-curl -s "http://localhost:9090/api/v1/rules?type=alert" | \
-  python3 -c "
-import sys, json
-d = json.load(sys.stdin)
-groups = d.get('data', {}).get('groups', [])
-for g in groups:
-    for r in g.get('rules', []):
-        print(f'  Alerta: {r[\"name\"]} | Estado: {r[\"state\"]} | Severidad: {r.get(\"labels\",{}).get(\"severity\",\"N/A\")}')
-"
-
-kill %1 2>/dev/null
-```
-
-### Salida esperada
-
-```
-=== Generando tráfico de prueba (60 requests) ===
-=== Tráfico generado. Esperando 15s para propagación... ===
-=== Listo para verificar dashboards ===
-Trazas encontradas: 5
---- Request Rate ---
-Series: 1
---- Latencia p99 ---
-  order-service: 0.0523s
-  Alerta: HighLatencyP99 | Estado: inactive | Severidad: warning
-  Alerta: HighErrorRate | Estado: inactive | Severidad: critical
-```
-
-### Verificación
-
-```bash
-# Verificación integral del pipeline
-echo "=== Verificación del Pipeline de Observabilidad ==="
-
-# 1. OTel Collector running
-OTEL_OK=$(kubectl get pods -n observability -l app.kubernetes.io/name=opentelemetry-collector -o jsonpath='{.items[0].status.phase}')
-echo "1. OTel Collector: $OTEL_OK"
-
-# 2. Jaeger receiving traces
-JAEGER_OK=$(kubectl get pods -n observability -l app.kubernetes.io/name=jaeger -o jsonpath='{.items[0].status.phase}')
-echo "2. Jaeger: $JAEGER_OK"
-
-# 3. Prometheus scraping
-PROM_OK=$(kubectl get pods -n monitoring -l app.kubernetes.io/name=prometheus -o jsonpath='{.items[0].status.phase}')
-echo "3. Prometheus: $PROM_OK"
-
-# 4. Grafana accessible
-GRAF_OK=$(kubectl get pods -n monitoring -l app.kubernetes.io/name=grafana -o jsonpath='{.items[0].status.phase}')
-echo "4. Grafana: $GRAF_OK"
-
-# 5. Service instrumented
-SVC_OK=$(kubectl get pods -l app=order-service -o jsonpath='{.items[0].status.phase}')
-echo "5. Order Service: $SVC_OK"
-
-echo ""
-echo "✓ Pipeline completo operativo" 
-```
-
----
-
-## Validación y Testing
-
-Ejecuta la siguiente validación integral que confirma el funcionamiento end-to-end:
-
-```bash
-cat > ~/microservices-lab/observability/validate_lab.sh << 'SCRIPT'
-#!/bin/bash
-set -e
-PASS=0
-FAIL=0
-
-check() {
-    local desc="$1"
-    local cmd="$2"
-    if eval "$cmd" > /dev/null 2>&1; then
-        echo "✓ $desc"
-        ((PASS++))
-    else
-        echo "✗ $desc"
-        ((FAIL++))
-    fi
-}
-
-echo "═══════════════════════════════════════════════════"
-echo "  VALIDACIÓN LAB 08-00-01: Observabilidad"
-echo "═══════════════════════════════════════════════════"
-echo ""
-
-# Infraestructura
-check "Namespace 'observability' existe" \
-  "kubectl get namespace observability"
-
-check "Namespace 'monitoring' existe" \
-  "kubectl get namespace monitoring"
-
-check "OTel Collector en estado Running" \
-  "kubectl get pods -n observability -l app.kubernetes.io/name=opentelemetry-collector -o jsonpath='{.items[0].status.phase}' | grep -q Running"
-
-check "Jaeger en estado Running" \
-  "kubectl get pods -n observability -l app.kubernetes.io/name=jaeger -o jsonpath='{.items[0].status.phase}' | grep -q Running"
-
-check "Prometheus en estado Running" \
-  "kubectl get pods -n monitoring -l app.kubernetes.io/name=prometheus --field-selector=status.phase=Running -o name | grep -q pod"
-
-check "Grafana en estado Running" \
-  "kubectl get pods -n monitoring -l app.kubernetes.io/name=grafana -o jsonpath='{.items[0].status.phase}' | grep -q Running"
-
-# Instrumentación
-check "Archivo tracing.py existe en order-service" \
-  "test -f ~/microservices-lab/order-service/tracing.py"
-
-check "Archivo metrics.py existe en order-service" \
-  "test -f ~/microservices-lab/order-service/metrics.py"
-
-check "Archivo logging_config.py existe en order-service" \
-  "test -f ~/microservices-lab/order-service/logging_config.py"
-
-check "Reglas de alertas configuradas" \
-  "test -f ~/microservices-lab/observability/prometheus/alerting-rules.yaml"
-
-check "Dashboard Grafana configurado" \
-  "test -f ~/microservices-lab/observability/grafana/dashboards/microservices-red.json"
-
-# Configuración
-check "OTel Collector expone puerto 4317 (gRPC)" \
-  "kubectl get svc -n observability otel-collector-opentelemetry-collector -o jsonpath='{.spec.ports[?(@.port==4317)].port}' | grep -q 4317"
-
-check "OTel Collector expone puerto 4318 (HTTP)" \
-  "kubectl get svc -n observability otel-collector-opentelemetry-collector -o jsonpath='{.spec.ports[?(@.port==4318)].port}' | grep -q 4318"
-
-check "Anotación prometheus.io/scrape en order-service" \
-  "kubectl get deployment order-service -o jsonpath='{.spec.template.metadata.annotations.prometheus\\.io/scrape}' | grep -q true"
-
-echo ""
-echo "═══════════════════════════════════════════════════"
-echo "  Resultado: $PASS pasaron, $FAIL fallaron"
-echo "═══════════════════════════════════════════════════"
-
-[ $FAIL -eq 0 ] && echo "  🎉 ¡Laboratorio completado exitosamente!" || echo "  ⚠ Revisa los items fallidos"
-SCRIPT
-chmod +x ~/microservices-lab/observability/validate_lab.sh
-~/microservices-lab/observability/validate_lab.sh
-```
-
-**Resultado esperado:** Todos los checks deben mostrar `✓`.
-
----
-
-## Solución de Problemas
-
-### Problema 1: OTel Collector no recibe spans del servicio
-
-**Síntomas:** Jaeger no muestra trazas del `order-service`. Los logs del Collector no muestran actividad de recepción.
-
-**Causa:** El endpoint OTLP configurado en el servicio no es alcanzable desde el pod del microservicio. Esto ocurre cuando el nombre DNS del servicio del Collector es incorrecto o hay políticas de red que bloquean la comunicación entre namespaces.
-
-**Solución:**
-
-```bash
-# 1. Verificar que el servicio del Collector es resolvible
-kubectl run dns-test --rm -it --image=busybox --restart=Never -- \
-  nslookup otel-collector-opentelemetry-collector.observability.svc.cluster.local
-
-# 2. Verificar conectividad desde el namespace default
-kubectl run curl-test --rm -it --image=curlimages/curl --restart=Never -- \
-  curl -v http://otel-collector-opentelemetry-collector.observability.svc.cluster.local:4318/v1/traces
-
-# 3. Si el nombre es diferente, obtener el nombre correcto:
-kubectl get svc -n observability | grep otel
-
-# 4. Actualizar la variable de entorno en el deployment del servicio:
-kubectl set env deployment/order-service \
-  OTEL_EXPORTER_OTLP_ENDPOINT=http://<nombre-correcto>.observability.svc.cluster.local:4317
-
-# 5. Reiniciar el servicio
-kubectl rollout restart deployment/order-service
-```
-
-### Problema 2: Prometheus no muestra métricas del microservicio
-
-**Síntomas:** El endpoint `/metrics` del servicio responde correctamente con `curl`, pero las métricas no aparecen en Prometheus (query `http_requests_total` retorna vacío).
-
-**Causa:** Las anotaciones de scraping en el pod no coinciden con la configuración de `relabel_configs` en Prometheus, o el `scrape_interval` aún no ha transcurrido. Otra causa común es que la anotación `prometheus.io/port` contiene un valor incorrecto.
-
-**Solución:**
-
-```bash
-# 1. Verificar anotaciones del pod
-kubectl get pods -l app=order-service -o jsonpath='{.items[0].metadata.annotations}' | python3 -m json.tool
-
-# 2. Verificar que el puerto en la anotación es correcto (debe ser "8001")
-kubectl annotate pods -l app=order-service prometheus.io/port="8001" --overwrite
-
-# 3. Verificar targets en Prometheus
-kubectl port-forward -n monitoring svc/prometheus-server 9090:80 &
-sleep 2
-curl -s http://localhost:9090/api/v1/targets | python3 -c "
-import sys, json
-d = json.load(sys.stdin)
-for t in d['data']['activeTargets']:
-    if 'order' in t.get('labels',{}).get('pod',''):
-        print(f'Target: {t[\"scrapeUrl\"]} | Health: {t[\"health\"]} | Error: {t.get(\"lastError\",\"none\")}')
-"
-kill %1 2>/dev/null
-
-# 4. Si el target no aparece, verificar que el ServiceMonitor o la configuración
-#    de scraping incluye el namespace 'default':
-kubectl get cm prometheus-server -n monitoring -o yaml | grep -A5 "kubernetes_sd_configs"
-
-# 5. Forzar recarga de configuración de Prometheus:
-kubectl rollout restart deployment -n monitoring -l app.kubernetes.io/name=prometheus
-```
-
----
-
-## Limpieza
-
-Para eliminar todos los recursos creados en este laboratorio:
-
-```bash
-# Eliminar deployments de servicios instrumentados
-kubectl delete -f ~/microservices-lab/observability/order-service-deployment.yaml --ignore-not-found
-
-# Desinstalar charts de Helm
-helm uninstall grafana -n monitoring 2>/dev/null
-helm uninstall prometheus -n monitoring 2>/dev/null
-helm uninstall otel-collector -n observability 2>/dev/null
-helm uninstall jaeger -n observability 2>/dev/null
-
-# Eliminar ConfigMaps
-kubectl delete configmap grafana-dashboards -n monitoring --ignore-not-found
-
-# Eliminar namespaces (elimina todo su contenido)
-kubectl delete namespace observability --ignore-not-found
-kubectl delete namespace monitoring --ignore-not-found
-
-# Limpiar imágenes Docker locales
-eval $(minikube docker-env)
-docker rmi order-service:otel-v1 2>/dev/null
-
-echo "✓ Limpieza completada"
-```
-
----
-
-## Resumen
-
-En este laboratorio has construido un pipeline de observabilidad completo para microservicios FastAPI:
-
-| Componente | Logro |
+# Laboratorio 8 · Observabilidad de microservicios Python con OpenTelemetry
+
+**Curso:** Microservicios Avanzado · **Complejidad:** alta · **Bloom:** aplicar.
+**Duración guiada:** 66 minutos, con Lab 7 operativo, dependencias instaladas e imágenes preparadas.
+**Continuidad:** solución acumulativa de los labs 1–7; guía, código, chart Helm y validaciones incluidos en el ZIP.
+
+## Objetivos y resultado esperado
+
+1. Desplegar Collector, Jaeger, Prometheus, Alertmanager y Grafana en namespaces dedicados.
+2. Instrumentar FastAPI y generar trazas distribuidas con propagación W3C TraceContext.
+3. Exponer métricas RED mediante prometheus-fastapi-instrumentator y visualizarlas en Grafana.
+4. Emitir logs JSON con `trace_id` y `span_id`.
+5. Configurar alertas de latencia p99 > 500 ms y errores 5xx > 1%, y comprobar su recepción en Alertmanager.
+
+```mermaid
+flowchart TD
+  C["Cliente · JWT + traceparent"] --> G["Traefik · Lab 6"]
+  G --> O["Orders · CQRS y resiliencia"]
+  O -->|"Client Credentials + TraceContext"| I["Inventory · stock y reservas"]
+  G --> I
+  G --> U["Users demo · JWT"]
+  O -->|"OTLP"| T["OTel Collector"]
+  I -->|"OTLP"| T
+  U -->|"OTLP"| T
+  T --> J["Jaeger · trazas"]
+  O -->|"Métricas RED"| P["Prometheus"]
+  I -->|"Métricas RED"| P
+  U -->|"Métricas RED"| P
+  P --> A["Alertmanager · alertas"]
+  P --> F["Grafana · dashboard RED"]
+  J --> F
+```
+
+Vault sigue autenticando cada servicio con su ServiceAccount. Se conservan JWT de Keycloak, UUID, Decimal, EventStore/CQRS, outbox, Kafka, Redis, retries, bulkhead y circuit breakers. La observabilidad se añade a las aplicaciones existentes. Los logs JSON se consultan mediante `kubectl logs`; esta práctica no incorpora un backend adicional para almacenarlos.
+
+## Correcciones del original
+
+| Problema | Corrección |
 |---|---|
-| **OpenTelemetry Collector** | Configurado con receivers OTLP (gRPC:4317, HTTP:4318), processors batch y memory_limiter, exporters hacia Jaeger y Prometheus |
-| **Tracing distribuido** | Instrumentación automática FastAPI + spans manuales en lógica de negocio + propagación W3C TraceContext |
-| **Métricas RED** | prometheus-fastapi-instrumentator exponiendo rate, errors y duration en `/metrics` |
-| **Logging correlacionado** | JSON estructurado con `trace_id` y `span_id` extraídos del contexto OpenTelemetry |
-| **Alertas SLO** | HighLatencyP99 (>500ms por 2min) y HighErrorRate (>1% por 5min) en Alertmanager |
-| **Visualización** | Dashboard Grafana con paneles de RPS, Error Rate % y Latencia p99 |
+| Encabezado rotulado como laboratorio 4 | Identificación como laboratorio 8. |
+| Orders de ejemplo con persistencia simulada y paths incompatibles | Instrumentación del código acumulativo y su consulta real a Inventory. |
+| Nuevo Deployment en `default` sin Vault/JWT/configuración previa | Actualización de los mismos Deployments en `microservices`, conservando identidad y secretos. |
+| httpx instalado pero sin instrumentar | Instrumentación explícita del cliente HTTP real de Orders; propagación al hilo de resiliencia. |
+| Callback de métricas vacío que elimina las métricas predeterminadas | Callback que registra contadores e histogramas reales, con registry por aplicación. |
+| Consultas con `status_code` y `service` inexistentes | Etiquetas explícitas `service`, `method`, `handler`, `status` y consultas coherentes. |
+| Scraping en namespace incorrecto y dirección formada sólo con el puerto | Targets DNS completos y servicios internos de métricas para los tres recursos. |
+| Prueba que aprueba aunque falte la traza | Consulta del trace ID exacto y comprobación de servicios, spans y relación padre/hijo. |
+| Webhook de Alertmanager apuntando a su propia API v1 | Envío Prometheus → Alertmanager, API v2 y receiver local sin notificaciones externas. |
+| Charts sin versiones y valores incompatibles | Chart didáctico incluido, con cinco componentes e imágenes fijadas. |
+| Validaciones que sólo comprueban Running o archivos | Readiness, trazas concretas, logs correlacionados, series RED, dashboard y alerta recibida. |
 
-### Conceptos clave aplicados
+## 0. Preparación previa del instructor
 
-- Los **tres pilares de observabilidad** se complementan: métricas para detectar, trazas para localizar, logs para diagnosticar
-- La **propagación de contexto W3C** (`traceparent`) permite reconstruir el grafo causal de una solicitud distribuida
-- Las **métricas RED** (Rate, Errors, Duration) son el estándar para monitorear servicios orientados a solicitudes
-- Los **SLOs** deben ser medibles, con alertas que indiquen cuándo el sistema se degrada antes de que el usuario lo perciba
+Entorno Ubuntu/Bash del Lab 7: **Python 3.12**, minikube **1.39.0**, Kubernetes **1.35.8**, kubectl **1.35** y Helm **3.20.1**. Mantén el perfil/contexto `msvc-gateway`. Se recomienda asignar **8 CPU y 12 GiB a minikube**, con host de 24 GiB y 50 GB libres para el conjunto acumulativo. Un perfil de menor capacidad requiere comprobar previamente memoria y tiempos de arranque.
 
-### Recursos adicionales
+| Componente nuevo | Versión fijada |
+|---|---|
+| OpenTelemetry API / SDK / exporter OTLP gRPC | 1.45.1 |
+| Instrumentación FastAPI / HTTPX | 0.66b1, pareja del SDK seleccionado |
+| prometheus-fastapi-instrumentator | 7.0.0 |
+| Collector contrib | 0.162.0 |
+| Jaeger | 2.22.0 |
+| Prometheus | 3.15.0 |
+| Alertmanager | 0.34.1 |
+| Grafana | 13.2.3 |
+| Chart del laboratorio | `lab08-observability` 1.0.0 |
 
-- [OpenTelemetry Python Documentation](https://opentelemetry.io/docs/languages/python/)
-- [Prometheus Alerting Rules](https://prometheus.io/docs/prometheus/latest/configuration/alerting_rules/)
-- [Grafana Dashboard Best Practices](https://grafana.com/docs/grafana/latest/dashboards/build-dashboards/best-practices/)
-- [W3C Trace Context Specification](https://www.w3.org/TR/trace-context/)
+La instrumentación utiliza las APIs disponibles en FastAPI 0.111.0 y HTTPX 0.27.0. Se comprobó la instalación conjunta sin conflictos. Se sustituye Jaeger 1 por Jaeger 2 y su configuración basada en Collector. Las versiones del stack se obtuvieron de releases oficiales y se fijaron en el chart; no se resuelven durante la instalación.
+
+Desde `microservices-lab`:
+
+```bash
+python3.12 -m venv .venv312
+source .venv312/bin/activate
+python -m pip install -r order-service/requirements-dev.txt
+python -m pip check
+python scripts/preflight.py --auth
+export PROFILE=msvc-gateway KUBE_CONTEXT=msvc-gateway
+kubectl --context "$KUBE_CONTEXT" cluster-info
+helm lint observability/chart
+```
+
+Si partes de un clúster nuevo, reproduce **LAB06.md** y después **LAB07.md**. El ZIP contiene toda la solución acumulativa. Prepara las imágenes antes de clase; instalar paquetes y descargar el stack por primera vez puede exceder los 66 minutos.
+
+Conserva los port-forward de Keycloak y Traefik del Lab 6:
+
+```bash
+# Terminal 1
+kubectl --context msvc-gateway -n microservices port-forward service/keycloak 8080:8080
+```
+
+```bash
+# Terminal 2
+kubectl --context msvc-gateway -n traefik port-forward service/traefik 18080:80
+```
+
+Comprueba que los tres servicios están operativos y mantienen sus ACL:
+
+```bash
+bash scripts/lab07/check_acl.sh
+python scripts/lab06/validate_gateway.py
+```
+
+Si Vault dev se reinició, ejecuta primero `bash scripts/lab07/bootstrap.sh` y espera que se recuperen las aplicaciones. KV/auth/policies de Vault dev están en memoria; la auditoría conserva su PVC.
+
+## 1. Desplegar el stack con Helm · 10 minutos
+
+El chart compacto está en `observability/chart`. Sus archivos de configuración se empaquetan junto con los Deployments y Services. Se utilizan `observability` para Collector/Jaeger y `monitoring` para Prometheus/Alertmanager/Grafana. Los recursos de negocio permanecen en `microservices`.
+
+```bash
+for namespace in observability monitoring; do
+  kubectl --context "$KUBE_CONTEXT" create namespace "$namespace" --dry-run=client -o yaml \
+    | kubectl --context "$KUBE_CONTEXT" apply -f -
+done
+helm template lab08-observability observability/chart -n observability > /tmp/lab08-stack.yaml
+helm upgrade --install lab08-observability observability/chart \
+  --namespace observability --kube-context "$KUBE_CONTEXT" --wait --timeout=300s
+kubectl --context "$KUBE_CONTEXT" -n observability get deployments,pods,services
+kubectl --context "$KUBE_CONTEXT" -n monitoring get deployments,pods,services,pvc
+```
+
+Espera Collector y Jaeger Ready, y Prometheus, Alertmanager y Grafana Ready. Los probes usan HTTP; la verificación no depende de `wget` dentro de imágenes que podrían carecer de shell/herramientas.
+
+| Servicio | Namespace | Puerto y función |
+|---|---|---|
+| `otel-collector` | observability | 4317 OTLP gRPC, 4318 OTLP HTTP, 13133 health |
+| `jaeger` | observability | 4317/4318 ingestión OTLP, 16686 UI/API, 13133 health |
+| `prometheus` | monitoring | 9090 consultas y UI |
+| `alertmanager` | monitoring | 9093 UI/API v2 |
+| `grafana` | monitoring | 3000 dashboard |
+
+El Collector recibe **trazas**, aplica `memory_limiter` antes de `batch` y exporta OTLP a Jaeger. Las métricas RED se scrapean directamente desde las APIs. Esta elección evita contabilizar dos veces las mismas solicitudes mediante dos pipelines de métricas.
+
+Jaeger usa memoria acotada a 10 000 trazas: sus datos se pierden al reiniciar. Prometheus dispone de PVC de 2 GiB y retención de dos días. Grafana usa almacenamiento temporal y reproduce sus datasources/dashboard desde ConfigMap; Alertmanager usa almacenamiento temporal. Es un entorno de enseñanza, sin HA ni almacenamiento de trazas de producción.
+
+## 2. Revisar e integrar tracing y logs · 12 minutos
+
+La implementación se encuentra en `shared/observability`:
+
+| Archivo | Responsabilidad |
+|---|---|
+| `application.py` | Resource, provider, exporter OTLP, FastAPI/HTTPX, métricas y cierre. |
+| `context.py` | Contexto por solicitud y spans de negocio. |
+| `logging.py` | Middleware ASGI y formatter JSON de eventos de solicitud. |
+
+El launcher del Lab 7 primero lee Vault y crea la aplicación con sus secretos. Cuando `OBSERVABILITY_ENABLED=true`, instala la observabilidad antes de arrancar Uvicorn. Sigue usando un worker y una réplica por servicio.
+
+El Resource identifica `service.name`, `service.version`, `service.instance.id` y `deployment.environment.name`. Cada aplicación recibe un provider y registry propios; los factories de pruebas no comparten contadores accidentalmente. El sampling del laboratorio es parent-based con raíz always-on. El generador utiliza un `traceparent` sampled para poder encontrar su traza.
+
+Se instrumenta FastAPI y **el cliente HTTPX que consulta Inventory**. `asyncio.to_thread` conserva el contexto de la solicitud; el span cliente creado en el hilo propaga W3C `traceparent` a Inventory. Instalar httpx o instrumentar sólo FastAPI no logra esa propagación por sí solo.
+
+Se añaden dos spans manuales a operaciones existentes:
+
+- `inventory.check`: abarca la comprobación de stock, retries y fallback observados.
+- `orders.persist`: abarca la escritura real de eventos; el contador de pedidos se incrementa después de completarla.
+
+El resultado esperado es un span servidor de Orders, un span de comprobación, un span HTTP cliente, el span servidor de Inventory y un span de persistencia bajo el **mismo trace ID**. La relación padre/hijo demuestra causalidad, no sólo coincidencia de identificadores.
+
+Los logs de solicitud contienen exclusivamente:
+
+```json
+{
+  "timestamp": "2026-10-08T20:00:00+00:00",
+  "level": "INFO",
+  "event": "http_request_completed",
+  "service": "order-service",
+  "method": "POST",
+  "route": "/api/v1/orders",
+  "status": 201,
+  "trace_id": "4bf92f3577b34da6a3ce929d0e0e4736",
+  "span_id": "00f067aa0ba902b7"
+}
+```
+
+Este ejemplo ilustra el formato, no una evidencia de ejecución. Las rutas son plantillas; cuerpos, headers, query strings, claves administrativas y tokens no se incorporan al log de solicitud. No se reemplazan los handlers globales de logging. Uvicorn y las bibliotecas pueden emitir sus propios logs operativos además de estos eventos JSON.
+
+El Collector recibe spans en batch; al terminar el proceso se cierra el provider y se intenta vaciar la cola. La exportación es asíncrona y acotada. La observabilidad no garantiza entrega sin pérdidas ante saturación o indisponibilidad prolongada del backend.
+
+## 3. Exponer métricas RED y mantener Vault · 8 minutos
+
+Se utiliza prometheus-fastapi-instrumentator con un callback que registra:
+
+| Métrica | Etiquetas |
+|---|---|
+| `http_requests_total` | `service`, `method`, `handler`, `status` |
+| `http_request_duration_seconds_bucket` | `service`, `method`, `handler`, `le` |
+| `business_orders_created_total` | `service` |
+
+El histograma contiene buckets de 5 ms a 10 s e incluye **0.5 s**, alineado con el umbral de latencia. Se excluyen `/health` y `/metrics`. Las rutas parametrizadas se normalizan como `/api/v1/orders/{order_id}`; las rutas desconocidas se agrupan, evitando una serie nueva por UUID o URL arbitraria.
+
+Prometheus añade `job` e `instance` durante scraping. El chart crea `order-service-metrics`, `inventory-service-metrics` y `users-service-metrics` con DNS completo y puerto correcto. Esos servicios publican también pods no Ready para observar una aplicación que sigue ejecutándose pero perdió una dependencia. `/metrics` puede responder cuando Vault está temporalmente indisponible; las solicitudes de negocio siguen sujetas al control de configuración del Lab 7.
+
+Los endpoints de métricas son internos y no se publican por las rutas de Traefik. En esta práctica hay una réplica por API. Escalar exige descubrimiento de targets por pod y considerar cada instancia; el scraping estático de un Service no representa correctamente varias réplicas.
+
+Despliega las imágenes instrumentadas:
+
+```bash
+bash scripts/lab08/deploy.sh
+kubectl --context "$KUBE_CONTEXT" -n microservices get pods
+```
+
+El script recupera/configura Vault dev, mantiene sus secretos vigentes, instala el stack y actualiza los mismos Deployments a `:lab08`. Conserva ServiceAccounts, JWT proyectado, políticas, launcher de Vault y variables de negocio. La instrumentación no instala un token root en las aplicaciones.
+
+## 4. Verificar trazas y logs del flujo real · 12 minutos
+
+Abre un port-forward en cada terminal adicional:
+
+```bash
+kubectl --context msvc-gateway -n observability port-forward service/jaeger 16686:16686
+```
+
+```bash
+kubectl --context msvc-gateway -n monitoring port-forward service/prometheus 9090:9090
+```
+
+```bash
+kubectl --context msvc-gateway -n monitoring port-forward service/alertmanager 9093:9093
+```
+
+```bash
+kubectl --context msvc-gateway -n monitoring port-forward service/grafana 3000:3000
+```
+
+Desde la raíz del proyecto y con el entorno Python activo:
+
+```bash
+python scripts/lab08/test_trace.py
+python scripts/lab08/validate_logs.py
+```
+
+La primera prueba obtiene un JWT administrativo, crea un producto con stock 20 y un pedido de 2 unidades por 10.00, exige respuesta 201 y precheck verificado. Envía un trace ID aleatorio en `traceparent` y consulta **esa traza concreta** en Jaeger durante un máximo de 45 s. Exige Orders e Inventory, los dos spans manuales y la relación HTTP cliente/servidor.
+
+Se guarda únicamente el identificador de evidencia en `lab08-trace-id.txt`. La segunda prueba busca el mismo ID en los logs JSON de ambos servicios, exige `span_id` válido y rechaza campos inesperados. Faltas de propagación o evidencia hacen fallar los scripts. No se asume que FastAPI devuelve `traceparent` como header de respuesta.
+
+Abre Jaeger en [http://localhost:16686](http://localhost:16686) y consulta el ID guardado. Ubica `inventory.check`, la llamada HTTP hacia Inventory y `orders.persist`. El tracing de esta práctica demuestra el tramo **HTTP Orders → Inventory**; no incluye propagación de contexto a través de mensajes Kafka ni spans automáticos de cada consulta SQL.
+
+## 5. Consultar RED y visualizar Grafana · 8 minutos
+
+```bash
+python scripts/lab08/generate_traffic.py --seconds 30
+python scripts/lab08/validate_backends.py
+```
+
+El tráfico saludable pasa por Traefik con JWT y consulta los tres recursos con pausas para respetar el rate limiter. La validación espera tres targets UP y series finitas para los tres servicios, sin aceptar una respuesta vacía como éxito.
+
+En [Prometheus](http://localhost:9090), consulta:
+
+```promql
+lab:http_request_rate:5m
+```
+
+```promql
+lab:http_error_ratio:5m
+```
+
+```promql
+lab:http_latency_p99:5m
+```
+
+Las recording rules usan una ventana de 5 minutos. El ratio considera **5xx / solicitudes instrumentadas**; 4xx no se clasifican como fallos del servidor. Si todavía no existe una serie 5xx, se construye un cero a partir del denominador. Sin tráfico suficiente, la latencia puede ser NaN; genera solicitudes y espera al menos dos scrapes. Un panel vacío no demuestra cumplimiento del SLO.
+
+En [Grafana](http://localhost:3000), usa `admin` / `lab08-grafana-demo`, credenciales ficticias guardadas en el Secret `lab08-grafana-admin`. Abre **Microservices → Lab08 · Microservices RED**. Debes ver tres paneles: solicitudes/s, proporción de errores y p99 en segundos. Los datasources tienen UID `prometheus` y `jaeger`, referenciados explícitamente por el dashboard.
+
+## 6. Comprobar alertas y distinguir SLO de prueba de transporte · 10 minutos
+
+El archivo `observability/chart/files/rules.yaml` es la fuente de reglas:
+
+| Alerta | Condición | Duración |
+|---|---|---|
+| `HighLatencyP99` | p99 en ventana de 5 min > 0.5 s | 2 min |
+| `HighErrorRate` | ratio 5xx > 0.01 con tráfico positivo | 5 min |
+| `MicroserviceMetricsUnavailable` | target de microservicio con `up == 0` | 1 min |
+
+Estas son alertas de umbral sobre SLIs asociados a los objetivos de latencia y errores. No calculan cumplimiento mensual ni burn rate de un presupuesto de errores. Conserva los tiempos reales al interpretar pending/firing.
+
+El flujo es **Prometheus evalúa → envía alertas → Alertmanager agrupa y muestra**. El receiver `lab-ui` no envía correos, mensajes ni webhooks externos.
+
+Comprueba el transporte en pocos minutos:
+
+```bash
+python scripts/lab08/test_alert.py
+```
+
+El script instala temporalmente una regla separada `Lab08PipelineTest`, espera su proyección en el pod, recarga Prometheus y exige encontrarla en `/api/v2/alerts` de Alertmanager. Finalmente restaura `groups: []` y comprueba que la regla desaparece de Prometheus. La alerta recibida puede permanecer un tiempo como resuelta/expirada. Esta prueba no modifica los umbrales ni los `for` de las alertas SLO.
+
+Para comprobar sus expresiones y tiempos con datos reproducibles, usa el `promtool` de la imagen fijada:
+
+```bash
+docker run --rm --entrypoint /bin/promtool \
+  -v "$PWD/observability:/work:ro" -w /work/tests \
+  prom/prometheus:v3.15.0 test rules rules-test.yaml
+```
+
+Las cuatro situaciones verifican tráfico saludable sin series 5xx, errores sostenidos y espera de cinco minutos, latencia alta y espera de dos minutos, y ausencia de tráfico sin una falsa alerta de error.
+
+**Extensión opcional dentro de clase:** provocar los umbrales sobre el servicio demo. Abre otro port-forward:
+
+```bash
+kubectl --context msvc-gateway -n microservices port-forward service/users-service 8003:8003
+```
+
+```bash
+python scripts/lab08/generate_traffic.py --fault --seconds 330
+```
+
+Se usa un endpoint de demostración protegido por JWT, `GET /api/v1/users/observability/probe`: espera 750 ms y devuelve 500 en uno de cada cinco ciclos. Se accede directamente para observar el backend sin que el rate limiter/circuit breaker del Gateway impida la generación controlada. Los SLIs de servicio incluyen estas solicitudes.
+
+Durante la ejecución observa pending → firing en Prometheus y la recepción en Alertmanager. La demora depende del scrape, evaluación y ventana. Terminar el generador detiene el fallo; los datos de los últimos cinco minutos pueden mantener las alertas activas hasta que salgan de la ventana. Esta extensión ocupa parte del tiempo de observación, no requiere sustituir la lógica de negocio.
+
+## Validación integral y evidencias
+
+Con los seis port-forward necesarios activos — Keycloak, Traefik, Jaeger, Prometheus, Alertmanager y Grafana — ejecuta:
+
+```bash
+bash scripts/lab08/validate_all.sh
+```
+
+Debe comprobar readiness, ACL de Vault, traza exacta, logs correlacionados, tráfico/RED, dashboard/datasources provisionados, alerta recibida y el flujo acumulativo de reserva Kafka/Redis. Un fallo produce un código de salida distinto de cero.
+
+Entrega: trace ID y vista de la traza, logs JSON de Orders/Inventory con ese ID, tres targets UP, paneles RED y evidencia de alerta en Alertmanager. Los tokens y secretos quedan fuera de las evidencias.
+
+**Distribución guiada:** 10 + 12 + 8 + 12 + 8 + 10 = 60 minutos; quedan 6 minutos para evidencias y discusión. La preparación de imágenes y del Lab 7 ocurre antes de la sesión.
+
+## Diagnóstico y pausa
+
+| Síntoma | Comprobación |
+|---|---|
+| Vault perdió KV tras reiniciar | Ejecuta `scripts/lab07/bootstrap.sh`; espera recuperación de los servicios. |
+| Traces no llegan a Jaeger | Comprueba `OBSERVABILITY_ENABLED`, endpoint OTLP 4317, pipeline traces del Collector y exporter OTLP hacia Jaeger. |
+| Sólo aparece Orders | Revisa instrumentación del cliente HTTPX y el contexto del hilo; no basta con instrumentar FastAPI. |
+| ID no aparece en respuesta | La prueba utiliza Jaeger y los logs; no depende de un header de respuesta opcional. |
+| `/metrics` existe pero faltan RED | Verifica que el callback registra métricas y que se consulta la aplicación instrumentada. |
+| Target DOWN | Comprueba puerto, DNS `*-metrics`, contenedor ejecutándose y acceso a `/metrics`. |
+| Panel sin series | Genera tráfico, espera dos scrapes, comprueba etiquetas `status/service` y usa la recording rule correcta. |
+| 401/403 al generar tráfico | Comprueba JWT, audiencia y roles/scopes; el token de Vault no autoriza APIs. |
+| 429 o circuito del Gateway abierto | Reduce tráfico o usa el probe directo para la demostración controlada. |
+| Alerta pending | Espera el `for` real; revisar la existencia de la regla no prueba que haya disparado. |
+| Alertmanager vacío | Verifica `alerting.alertmanagers` en Prometheus y su URL interna 9093. |
+| Dashboard sin datos | Comprueba datasource UID, conectividad Grafana → Prometheus y series de las reglas. |
+| Recursos Pending/OOMKilled | Revisa CPU/memoria del perfil, requests/limits y PVC de Prometheus. |
+
+Para pausar conservando imágenes y datos del perfil:
+
+```bash
+minikube -p msvc-gateway stop
+```
+
+Al retomar, inicia el perfil, recupera Vault dev, espera readiness y vuelve a abrir los port-forward. La pausa/reanudación puede perder trazas de Jaeger y estado temporal de Grafana/Alertmanager. La provisión reproduce el dashboard. El PVC de Prometheus está marcado `helm.sh/resource-policy: keep`; su eliminación explícita queda a cargo del instructor cuando termine el curso.
+
+Preguntas de cierre: ¿por qué no basta con ver pods Running? ¿Qué añade el span cliente a una traza? ¿Por qué una serie por UUID es un problema? ¿Qué diferencia hay entre una alerta recibida y un SLO incumplido? ¿Cómo se interpreta un panel sin tráfico?
+
+## Verificación de esta entrega y límites
+
+Se aprobaron **218 pruebas Python**: 119 de Orders, 57 de Inventory, 7 de Users y 35 de Vault/instrumentación/integración. Además, **cuatro escenarios de promtool** comprobaron reglas y duraciones. La instalación pasó `pip check`; Helm pasó lint/render y se validaron **27 objetos de Kubernetes**, junto con sintaxis Python/Bash.
+
+La integración utilizó Vault, Keycloak, PostgreSQL, Redis, Prometheus y Alertmanager **reales**. Verificó el arranque de los tres launchers, autenticación y rotación del Lab 7, pedido persistido, consulta autenticada a Inventory, logs correlacionados y spans exportados por la red en formato OTLP. El receptor OTLP de esa prueba fue un servidor de prueba, no el Collector. También se probó el envío de una alerta de Prometheus a Alertmanager.
+
+Se validaron las configuraciones con los binarios reales Collector 0.162.0 y Jaeger 2.22.0. **Una prueba del stack completo quedó omitida** porque el entorno impide funciones de proceso/IPC necesarias para ejecutar Collector/Jaeger y plugins de Grafana. No se presenta como probado el flujo Collector → Jaeger ni la visualización efectiva del dashboard de Grafana en este entorno.
+
+TokenReview continúa siendo un sustituto de prueba que valida JWT firmados; las pruebas locales desactivan Kafka. **No se ejecutó Docker/minikube aquí.** La validación integral incluida debe comprobar en el entorno del alumno proyección de ServiceAccounts/RBAC, reserva Kafka/Redis, recepción en Jaeger y dashboard operativo.
+
+Pruebas de instrumentación independientes del clúster:
+
+```bash
+python -m pytest tests-observability -q
+```
+
+Las suites de integración usan infraestructura de prueba y variables `VAULT_TEST_BINARY`, `KEYCLOAK_TEST_ISSUER`, `POSTGRES_TEST_ADMIN_URL`, `REDIS_TEST_URL` y `OBS_TEST_TOOLS`. Esta última identifica el directorio de binarios descrito en las fixtures; no es necesaria para realizar el laboratorio en Kubernetes. La base temporal `lab07_vault_http_test` se crea y elimina durante pruebas de stack. Sin herramientas/endpoints, los casos correspondientes se omiten.
+
+## Referencias oficiales
+
+- [Instrumentación manual de OpenTelemetry Python](https://opentelemetry.io/docs/languages/python/instrumentation/).
+- [Instrumentación FastAPI](https://opentelemetry-python-contrib.readthedocs.io/en/latest/instrumentation/fastapi/fastapi.html) y [HTTPX](https://opentelemetry-python-contrib.readthedocs.io/en/latest/instrumentation/httpx/httpx.html).
+- [prometheus-fastapi-instrumentator](https://github.com/trallnag/prometheus-fastapi-instrumentator).
+- [Releases Collector](https://github.com/open-telemetry/opentelemetry-collector-releases/releases) y [Jaeger](https://github.com/jaegertracing/jaeger/releases).
+- [Configuración Jaeger](https://www.jaegertracing.io/docs/2.21/deployment/configuration/).
+- [Alerting rules](https://prometheus.io/docs/prometheus/latest/configuration/alerting_rules/) y [pruebas de reglas](https://prometheus.io/docs/prometheus/latest/configuration/unit_testing_rules/).
+- [Configuración Alertmanager](https://prometheus.io/docs/alerting/latest/configuration/).
+- [Provisioning de Grafana](https://grafana.com/docs/grafana/latest/administration/provisioning/).
+- [W3C Trace Context](https://www.w3.org/TR/trace-context/).

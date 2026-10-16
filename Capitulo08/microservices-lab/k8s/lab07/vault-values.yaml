@@ -1,0 +1,29 @@
+global:
+  tlsDisable: true
+injector:
+  enabled: false
+server:
+  image:
+    repository: hashicorp/vault
+    tag: "2.1.2"
+  dev:
+    enabled: true
+    devRootToken: lab07-operator-only
+  service:
+    type: ClusterIP
+  dataStorage:
+    enabled: false
+  auditStorage:
+    enabled: true
+    size: 1Gi
+  authDelegator:
+    enabled: true
+  resources:
+    requests:
+      cpu: 100m
+      memory: 128Mi
+    limits:
+      cpu: "1"
+      memory: 512Mi
+ui:
+  enabled: false

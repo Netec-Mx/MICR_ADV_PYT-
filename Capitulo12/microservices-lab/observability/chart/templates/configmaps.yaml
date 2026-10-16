@@ -1,0 +1,76 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: lab08-collector
+  namespace: observability
+data:
+  collector.yaml: |
+{{ .Files.Get "files/collector.yaml" | indent 4 }}
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: lab08-jaeger
+  namespace: observability
+data:
+  jaeger.yaml: |
+{{ .Files.Get "files/jaeger.yaml" | indent 4 }}
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: lab08-prometheus
+  namespace: monitoring
+data:
+  prometheus.yaml: |
+{{ if .Values.mesh.enabled }}{{ .Files.Get "files/prometheus-mesh.yaml" | indent 4 }}{{ else }}{{ .Files.Get "files/prometheus.yaml" | indent 4 }}{{ end }}
+  rules.yaml: |
+{{ .Files.Get "files/rules.yaml" | indent 4 }}
+{{ if and .Values.lab12 .Values.lab12.enabled }}{{ .Files.Get "files/lab12-slo.yaml" | indent 4 }}{{ end }}
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: lab08-demo-rules
+  namespace: monitoring
+data:
+  rules.yaml: |
+{{ .Files.Get "files/demo-rules.yaml" | indent 4 }}
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: lab08-alertmanager
+  namespace: monitoring
+data:
+  alertmanager.yaml: |
+{{ .Files.Get "files/alertmanager.yaml" | indent 4 }}
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: lab08-grafana
+  namespace: monitoring
+data:
+  grafana-datasources.yaml: |
+{{ .Files.Get "files/grafana-datasources.yaml" | indent 4 }}
+  grafana-providers.yaml: |
+{{ .Files.Get "files/grafana-providers.yaml" | indent 4 }}
+  dashboard.json: |
+{{ .Files.Get "files/dashboard.json" | indent 4 }}
+{{ if and .Values.lab12 .Values.lab12.enabled }}
+  lab12.json: |
+{{ .Files.Get "files/dashboard-lab12.json" | indent 4 }}
+{{ end }}
+
+{{- if .Values.mesh.enabled }}
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: lab10-grafana-mesh
+  namespace: monitoring
+data:
+  dashboard.json: |
+{{ .Files.Get "files/dashboard-mesh.json" | indent 4 }}
+{{- end }}

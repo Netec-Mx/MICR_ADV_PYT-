@@ -1,0 +1,11 @@
+apiVersion: security.istio.io/v1
+kind: PeerAuthentication
+metadata:
+  name: lab10-strict
+  namespace: microservices
+spec:
+  selector:
+    matchLabels:
+      lab10-mesh: 'true'
+  mtls:
+    mode: STRICT

@@ -1,0 +1,27 @@
+{{- if .Values.mesh.enabled }}
+apiVersion: v1
+kind: Service
+metadata:
+  name: order-service-v2-metrics
+  namespace: microservices
+spec:
+  selector:
+    app: order-service-v2
+  ports:
+  - name: http
+    port: 8001
+    targetPort: 15020
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: inventory-service-green-metrics
+  namespace: microservices
+spec:
+  selector:
+    app: inventory-service-green
+  ports:
+  - name: http
+    port: 8002
+    targetPort: 15020
+{{- end }}

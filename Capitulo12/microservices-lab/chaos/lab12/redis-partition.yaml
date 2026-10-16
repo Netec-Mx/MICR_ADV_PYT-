@@ -1,0 +1,24 @@
+apiVersion: chaos-mesh.org/v1alpha1
+metadata:
+  namespace: chaos-testing
+  labels:
+    lab12-owned: 'true'
+  name: lab12-redis-partition
+kind: NetworkChaos
+spec:
+  action: partition
+  mode: all
+  selector:
+    namespaces:
+    - microservices
+    labelSelectors:
+      lab10-service: inventory-service
+  direction: both
+  target:
+    mode: all
+    selector:
+      namespaces:
+      - microservices
+      labelSelectors:
+        app: redis
+  duration: 60s

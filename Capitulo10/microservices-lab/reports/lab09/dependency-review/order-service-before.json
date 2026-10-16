@@ -1,0 +1,1578 @@
+{
+  "SchemaVersion": 2,
+  "Trivy": {
+    "Version": "0.75.0"
+  },
+  "ReportID": "01a11d3c-dd37-7954-bf7c-1a5acff0d296",
+  "CreatedAt": "2026-10-08T15:38:10.487613756-05:00",
+  "ArtifactName": "/tmp/lab09-scans/order-service/before",
+  "ArtifactType": "filesystem",
+  "Results": [
+    {
+      "Target": "requirements.txt",
+      "Class": "lang-pkgs",
+      "Type": "pip",
+      "Packages": [
+        {
+          "Name": "Jinja2",
+          "Identifier": {
+            "PURL": "pkg:pypi/jinja2@3.1.6",
+            "UID": "e33cde321ffc4674"
+          },
+          "Version": "3.1.6",
+          "Locations": [
+            {
+              "StartLine": 2,
+              "EndLine": 2
+            }
+          ],
+          "AnalyzedBy": "pip"
+        },
+        {
+          "Name": "Mako",
+          "Identifier": {
+            "PURL": "pkg:pypi/mako@1.4.3",
+            "UID": "de21ab6f1b7d7ce4"
+          },
+          "Version": "1.4.3",
+          "Locations": [
+            {
+              "StartLine": 3,
+              "EndLine": 3
+            }
+          ],
+          "AnalyzedBy": "pip"
+        },
+        {
+          "Name": "MarkupSafe",
+          "Identifier": {
+            "PURL": "pkg:pypi/markupsafe@3.0.4",
+            "UID": "e459d6d188a72753"
+          },
+          "Version": "3.0.4",
+          "Locations": [
+            {
+              "StartLine": 4,
+              "EndLine": 4
+            }
+          ],
+          "AnalyzedBy": "pip"
+        },
+        {
+          "Name": "PyJWT",
+          "Identifier": {
+            "PURL": "pkg:pypi/pyjwt@2.15.1",
+            "UID": "d807eedbdb5663e"
+          },
+          "Version": "2.15.1",
+          "Locations": [
+            {
+              "StartLine": 5,
+              "EndLine": 5
+            }
+          ],
+          "AnalyzedBy": "pip"
+        },
+        {
+          "Name": "PyYAML",
+          "Identifier": {
+            "PURL": "pkg:pypi/pyyaml@6.0.3",
+            "UID": "682d5ac463e5a0ff"
+          },
+          "Version": "6.0.3",
+          "Licenses": [
+            "MIT"
+          ],
+          "Locations": [
+            {
+              "StartLine": 6,
+              "EndLine": 6
+            }
+          ],
+          "AnalyzedBy": "pip"
+        },
+        {
+          "Name": "Pygments",
+          "Identifier": {
+            "PURL": "pkg:pypi/pygments@2.21.0",
+            "UID": "ce4743cf1c3699ed"
+          },
+          "Version": "2.21.0",
+          "Locations": [
+            {
+              "StartLine": 7,
+              "EndLine": 7
+            }
+          ],
+          "AnalyzedBy": "pip"
+        },
+        {
+          "Name": "SQLAlchemy",
+          "Identifier": {
+            "PURL": "pkg:pypi/sqlalchemy@2.0.30",
+            "UID": "ee498df44a305413"
+          },
+          "Version": "2.0.30",
+          "Locations": [
+            {
+              "StartLine": 8,
+              "EndLine": 8
+            }
+          ],
+          "AnalyzedBy": "pip"
+        },
+        {
+          "Name": "alembic",
+          "Identifier": {
+            "PURL": "pkg:pypi/alembic@1.13.1",
+            "UID": "35f1d841fc061b78"
+          },
+          "Version": "1.13.1",
+          "Locations": [
+            {
+              "StartLine": 9,
+              "EndLine": 9
+            }
+          ],
+          "AnalyzedBy": "pip"
+        },
+        {
+          "Name": "annotated-doc",
+          "Identifier": {
+            "PURL": "pkg:pypi/annotated-doc@0.0.5",
+            "UID": "aeccc5659e0d22ca"
+          },
+          "Version": "0.0.5",
+          "Locations": [
+            {
+              "StartLine": 10,
+              "EndLine": 10
+            }
+          ],
+          "AnalyzedBy": "pip"
+        },
+        {
+          "Name": "annotated-types",
+          "Identifier": {
+            "PURL": "pkg:pypi/annotated-types@0.8.0",
+            "UID": "9fba24848add3f09"
+          },
+          "Version": "0.8.0",
+          "Licenses": [
+            "MIT"
+          ],
+          "Locations": [
+            {
+              "StartLine": 11,
+              "EndLine": 11
+            }
+          ],
+          "AnalyzedBy": "pip"
+        },
+        {
+          "Name": "anyio",
+          "Identifier": {
+            "PURL": "pkg:pypi/anyio@4.15.1",
+            "UID": "b535136c1ec4325e"
+          },
+          "Version": "4.15.1",
+          "Locations": [
+            {
+              "StartLine": 12,
+              "EndLine": 12
+            }
+          ],
+          "AnalyzedBy": "pip"
+        },
+        {
+          "Name": "asgiref",
+          "Identifier": {
+            "PURL": "pkg:pypi/asgiref@3.12.1",
+            "UID": "775d7b2179c3499b"
+          },
+          "Version": "3.12.1",
+          "Locations": [
+            {
+              "StartLine": 13,
+              "EndLine": 13
+            }
+          ],
+          "AnalyzedBy": "pip"
+        },
+        {
+          "Name": "asyncpg",
+          "Identifier": {
+            "PURL": "pkg:pypi/asyncpg@0.29.0",
+            "UID": "4a057dcf6b50fcde"
+          },
+          "Version": "0.29.0",
+          "Locations": [
+            {
+              "StartLine": 14,
+              "EndLine": 14
+            }
+          ],
+          "AnalyzedBy": "pip"
+        },
+        {
+          "Name": "certifi",
+          "Identifier": {
+            "PURL": "pkg:pypi/certifi@2026.7.22",
+            "UID": "a563008ed1824d4b"
+          },
+          "Version": "2026.7.22",
+          "Locations": [
+            {
+              "StartLine": 15,
+              "EndLine": 15
+            }
+          ],
+          "AnalyzedBy": "pip"
+        },
+        {
+          "Name": "cffi",
+          "Identifier": {
+            "PURL": "pkg:pypi/cffi@2.1.1",
+            "UID": "5fbab5a686c832da"
+          },
+          "Version": "2.1.1",
+          "Licenses": [
+            "MIT-0"
+          ],
+          "Locations": [
+            {
+              "StartLine": 16,
+              "EndLine": 16
+            }
+          ],
+          "AnalyzedBy": "pip"
+        },
+        {
+          "Name": "charset-normalizer",
+          "Identifier": {
+            "PURL": "pkg:pypi/charset-normalizer@3.5.2",
+            "UID": "408ca825e00194b9"
+          },
+          "Version": "3.5.2",
+          "Locations": [
+            {
+              "StartLine": 17,
+              "EndLine": 17
+            }
+          ],
+          "AnalyzedBy": "pip"
+        },
+        {
+          "Name": "click",
+          "Identifier": {
+            "PURL": "pkg:pypi/click@8.5.0",
+            "UID": "88ba205489bf5c6"
+          },
+          "Version": "8.5.0",
+          "Locations": [
+            {
+              "StartLine": 18,
+              "EndLine": 18
+            }
+          ],
+          "AnalyzedBy": "pip"
+        },
+        {
+          "Name": "confluent-kafka",
+          "Identifier": {
+            "PURL": "pkg:pypi/confluent-kafka@2.4.0",
+            "UID": "bf4509c9d847af21"
+          },
+          "Version": "2.4.0",
+          "Locations": [
+            {
+              "StartLine": 19,
+              "EndLine": 19
+            }
+          ],
+          "AnalyzedBy": "pip"
+        },
+        {
+          "Name": "cryptography",
+          "Identifier": {
+            "PURL": "pkg:pypi/cryptography@50.0.2",
+            "UID": "a3c078572d49e306"
+          },
+          "Version": "50.0.2",
+          "Locations": [
+            {
+              "StartLine": 20,
+              "EndLine": 20
+            }
+          ],
+          "AnalyzedBy": "pip"
+        },
+        {
+          "Name": "dnspython",
+          "Identifier": {
+            "PURL": "pkg:pypi/dnspython@2.8.0",
+            "UID": "dce11757b044a5cb"
+          },
+          "Version": "2.8.0",
+          "Locations": [
+            {
+              "StartLine": 21,
+              "EndLine": 21
+            }
+          ],
+          "AnalyzedBy": "pip"
+        },
+        {
+          "Name": "email-validator",
+          "Identifier": {
+            "PURL": "pkg:pypi/email-validator@2.3.0",
+            "UID": "b4b60742dd182e3b"
+          },
+          "Version": "2.3.0",
+          "Locations": [
+            {
+              "StartLine": 22,
+              "EndLine": 22
+            }
+          ],
+          "AnalyzedBy": "pip"
+        },
+        {
+          "Name": "fastapi",
+          "Identifier": {
+            "PURL": "pkg:pypi/fastapi@0.111.0",
+            "UID": "3f076695af530d45"
+          },
+          "Version": "0.111.0",
+          "Locations": [
+            {
+              "StartLine": 24,
+              "EndLine": 24
+            }
+          ],
+          "AnalyzedBy": "pip"
+        },
+        {
+          "Name": "fastapi-cli",
+          "Identifier": {
+            "PURL": "pkg:pypi/fastapi-cli@0.0.32",
+            "UID": "dcba166226db6a76"
+          },
+          "Version": "0.0.32",
+          "Locations": [
+            {
+              "StartLine": 23,
+              "EndLine": 23
+            }
+          ],
+          "AnalyzedBy": "pip"
+        },
+        {
+          "Name": "googleapis-common-protos",
+          "Identifier": {
+            "PURL": "pkg:pypi/googleapis-common-protos@1.75.5",
+            "UID": "3219f306abd7a25b"
+          },
+          "Version": "1.75.5",
+          "Locations": [
+            {
+              "StartLine": 25,
+              "EndLine": 25
+            }
+          ],
+          "AnalyzedBy": "pip"
+        },
+        {
+          "Name": "greenlet",
+          "Identifier": {
+            "PURL": "pkg:pypi/greenlet@3.5.6",
+            "UID": "31e64a45da6fd1d4"
+          },
+          "Version": "3.5.6",
+          "Locations": [
+            {
+              "StartLine": 26,
+              "EndLine": 26
+            }
+          ],
+          "AnalyzedBy": "pip"
+        },
+        {
+          "Name": "grpcio",
+          "Identifier": {
+            "PURL": "pkg:pypi/grpcio@1.84.0",
+            "UID": "eaffa0f24eeb1534"
+          },
+          "Version": "1.84.0",
+          "Locations": [
+            {
+              "StartLine": 27,
+              "EndLine": 27
+            }
+          ],
+          "AnalyzedBy": "pip"
+        },
+        {
+          "Name": "h11",
+          "Identifier": {
+            "PURL": "pkg:pypi/h11@0.16.0",
+            "UID": "35090667eca9e254"
+          },
+          "Version": "0.16.0",
+          "Locations": [
+            {
+              "StartLine": 28,
+              "EndLine": 28
+            }
+          ],
+          "AnalyzedBy": "pip"
+        },
+        {
+          "Name": "httpcore",
+          "Identifier": {
+            "PURL": "pkg:pypi/httpcore@1.0.9",
+            "UID": "707f798cb31b6294"
+          },
+          "Version": "1.0.9",
+          "Locations": [
+            {
+              "StartLine": 29,
+              "EndLine": 29
+            }
+          ],
+          "AnalyzedBy": "pip"
+        },
+        {
+          "Name": "httptools",
+          "Identifier": {
+            "PURL": "pkg:pypi/httptools@0.8.0",
+            "UID": "a9cf742603af3c81"
+          },
+          "Version": "0.8.0",
+          "Locations": [
+            {
+              "StartLine": 30,
+              "EndLine": 30
+            }
+          ],
+          "AnalyzedBy": "pip"
+        },
+        {
+          "Name": "httpx",
+          "Identifier": {
+            "PURL": "pkg:pypi/httpx@0.27.0",
+            "UID": "4444cce37f3cba8d"
+          },
+          "Version": "0.27.0",
+          "Locations": [
+            {
+              "StartLine": 31,
+              "EndLine": 31
+            }
+          ],
+          "AnalyzedBy": "pip"
+        },
+        {
+          "Name": "hvac",
+          "Identifier": {
+            "PURL": "pkg:pypi/hvac@2.3.0",
+            "UID": "3a74ada928e27388"
+          },
+          "Version": "2.3.0",
+          "Locations": [
+            {
+              "StartLine": 32,
+              "EndLine": 32
+            }
+          ],
+          "AnalyzedBy": "pip"
+        },
+        {
+          "Name": "idna",
+          "Identifier": {
+            "PURL": "pkg:pypi/idna@3.20",
+            "UID": "a11ccfaef5c066bd"
+          },
+          "Version": "3.20",
+          "Locations": [
+            {
+              "StartLine": 33,
+              "EndLine": 33
+            }
+          ],
+          "AnalyzedBy": "pip"
+        },
+        {
+          "Name": "markdown-it-py",
+          "Identifier": {
+            "PURL": "pkg:pypi/markdown-it-py@4.2.0",
+            "UID": "762b4c5fb4491355"
+          },
+          "Version": "4.2.0",
+          "Locations": [
+            {
+              "StartLine": 34,
+              "EndLine": 34
+            }
+          ],
+          "AnalyzedBy": "pip"
+        },
+        {
+          "Name": "mdurl",
+          "Identifier": {
+            "PURL": "pkg:pypi/mdurl@0.1.2",
+            "UID": "695bc6dd0a7a1cc4"
+          },
+          "Version": "0.1.2",
+          "Locations": [
+            {
+              "StartLine": 35,
+              "EndLine": 35
+            }
+          ],
+          "AnalyzedBy": "pip"
+        },
+        {
+          "Name": "opentelemetry-api",
+          "Identifier": {
+            "PURL": "pkg:pypi/opentelemetry-api@1.45.1",
+            "UID": "7437f220645423ae"
+          },
+          "Version": "1.45.1",
+          "Locations": [
+            {
+              "StartLine": 36,
+              "EndLine": 36
+            }
+          ],
+          "AnalyzedBy": "pip"
+        },
+        {
+          "Name": "opentelemetry-exporter-otlp-common",
+          "Identifier": {
+            "PURL": "pkg:pypi/opentelemetry-exporter-otlp-common@0.66b1",
+            "UID": "8c834ecce5ca7a9c"
+          },
+          "Version": "0.66b1",
+          "Locations": [
+            {
+              "StartLine": 37,
+              "EndLine": 37
+            }
+          ],
+          "AnalyzedBy": "pip"
+        },
+        {
+          "Name": "opentelemetry-exporter-otlp-proto-common",
+          "Identifier": {
+            "PURL": "pkg:pypi/opentelemetry-exporter-otlp-proto-common@1.45.1",
+            "UID": "c9d80fe4511d6aaf"
+          },
+          "Version": "1.45.1",
+          "Locations": [
+            {
+              "StartLine": 38,
+              "EndLine": 38
+            }
+          ],
+          "AnalyzedBy": "pip"
+        },
+        {
+          "Name": "opentelemetry-exporter-otlp-proto-grpc",
+          "Identifier": {
+            "PURL": "pkg:pypi/opentelemetry-exporter-otlp-proto-grpc@1.45.1",
+            "UID": "4953fb90d224921f"
+          },
+          "Version": "1.45.1",
+          "Locations": [
+            {
+              "StartLine": 39,
+              "EndLine": 39
+            }
+          ],
+          "AnalyzedBy": "pip"
+        },
+        {
+          "Name": "opentelemetry-instrumentation",
+          "Identifier": {
+            "PURL": "pkg:pypi/opentelemetry-instrumentation@0.66b1",
+            "UID": "145d4429979afb48"
+          },
+          "Version": "0.66b1",
+          "Locations": [
+            {
+              "StartLine": 43,
+              "EndLine": 43
+            }
+          ],
+          "AnalyzedBy": "pip"
+        },
+        {
+          "Name": "opentelemetry-instrumentation-asgi",
+          "Identifier": {
+            "PURL": "pkg:pypi/opentelemetry-instrumentation-asgi@0.66b1",
+            "UID": "4591056731f7c7c5"
+          },
+          "Version": "0.66b1",
+          "Locations": [
+            {
+              "StartLine": 40,
+              "EndLine": 40
+            }
+          ],
+          "AnalyzedBy": "pip"
+        },
+        {
+          "Name": "opentelemetry-instrumentation-fastapi",
+          "Identifier": {
+            "PURL": "pkg:pypi/opentelemetry-instrumentation-fastapi@0.66b1",
+            "UID": "4ed885f2c69571e"
+          },
+          "Version": "0.66b1",
+          "Locations": [
+            {
+              "StartLine": 41,
+              "EndLine": 41
+            }
+          ],
+          "AnalyzedBy": "pip"
+        },
+        {
+          "Name": "opentelemetry-instrumentation-httpx",
+          "Identifier": {
+            "PURL": "pkg:pypi/opentelemetry-instrumentation-httpx@0.66b1",
+            "UID": "dfad767ffa569118"
+          },
+          "Version": "0.66b1",
+          "Locations": [
+            {
+              "StartLine": 42,
+              "EndLine": 42
+            }
+          ],
+          "AnalyzedBy": "pip"
+        },
+        {
+          "Name": "opentelemetry-proto",
+          "Identifier": {
+            "PURL": "pkg:pypi/opentelemetry-proto@1.45.1",
+            "UID": "709ad2edc770c7d5"
+          },
+          "Version": "1.45.1",
+          "Locations": [
+            {
+              "StartLine": 44,
+              "EndLine": 44
+            }
+          ],
+          "AnalyzedBy": "pip"
+        },
+        {
+          "Name": "opentelemetry-sdk",
+          "Identifier": {
+            "PURL": "pkg:pypi/opentelemetry-sdk@1.45.1",
+            "UID": "b412b1e23e063825"
+          },
+          "Version": "1.45.1",
+          "Locations": [
+            {
+              "StartLine": 45,
+              "EndLine": 45
+            }
+          ],
+          "AnalyzedBy": "pip"
+        },
+        {
+          "Name": "opentelemetry-semantic-conventions",
+          "Identifier": {
+            "PURL": "pkg:pypi/opentelemetry-semantic-conventions@0.66b1",
+            "UID": "4e39c7e517b1767a"
+          },
+          "Version": "0.66b1",
+          "Locations": [
+            {
+              "StartLine": 46,
+              "EndLine": 46
+            }
+          ],
+          "AnalyzedBy": "pip"
+        },
+        {
+          "Name": "opentelemetry-util-http",
+          "Identifier": {
+            "PURL": "pkg:pypi/opentelemetry-util-http@0.66b1",
+            "UID": "51336a990a747dad"
+          },
+          "Version": "0.66b1",
+          "Locations": [
+            {
+              "StartLine": 47,
+              "EndLine": 47
+            }
+          ],
+          "AnalyzedBy": "pip"
+        },
+        {
+          "Name": "orjson",
+          "Identifier": {
+            "PURL": "pkg:pypi/orjson@3.13.0",
+            "UID": "7b3bbde1f0283d86"
+          },
+          "Version": "3.13.0",
+          "Locations": [
+            {
+              "StartLine": 48,
+              "EndLine": 48
+            }
+          ],
+          "AnalyzedBy": "pip"
+        },
+        {
+          "Name": "packaging",
+          "Identifier": {
+            "PURL": "pkg:pypi/packaging@26.3",
+            "UID": "1ccdf83734ccd5a6"
+          },
+          "Version": "26.3",
+          "Licenses": [
+            "Apache-2.0 OR BSD-2-Clause"
+          ],
+          "Locations": [
+            {
+              "StartLine": 49,
+              "EndLine": 49
+            }
+          ],
+          "AnalyzedBy": "pip"
+        },
+        {
+          "Name": "prometheus-fastapi-instrumentator",
+          "Identifier": {
+            "PURL": "pkg:pypi/prometheus-fastapi-instrumentator@7.0.0",
+            "UID": "786dc4eaa2c2a6f0"
+          },
+          "Version": "7.0.0",
+          "Locations": [
+            {
+              "StartLine": 50,
+              "EndLine": 50
+            }
+          ],
+          "AnalyzedBy": "pip"
+        },
+        {
+          "Name": "prometheus_client",
+          "Identifier": {
+            "PURL": "pkg:pypi/prometheus-client@0.26.0",
+            "UID": "9fac1534e9000142"
+          },
+          "Version": "0.26.0",
+          "Locations": [
+            {
+              "StartLine": 51,
+              "EndLine": 51
+            }
+          ],
+          "AnalyzedBy": "pip"
+        },
+        {
+          "Name": "protobuf",
+          "Identifier": {
+            "PURL": "pkg:pypi/protobuf@7.36.2",
+            "UID": "b9f6f3458cb41ec4"
+          },
+          "Version": "7.36.2",
+          "Locations": [
+            {
+              "StartLine": 52,
+              "EndLine": 52
+            }
+          ],
+          "AnalyzedBy": "pip"
+        },
+        {
+          "Name": "pybreaker",
+          "Identifier": {
+            "PURL": "pkg:pypi/pybreaker@1.2.0",
+            "UID": "aa00abf5b417bd8f"
+          },
+          "Version": "1.2.0",
+          "Locations": [
+            {
+              "StartLine": 53,
+              "EndLine": 53
+            }
+          ],
+          "AnalyzedBy": "pip"
+        },
+        {
+          "Name": "pycparser",
+          "Identifier": {
+            "PURL": "pkg:pypi/pycparser@3.1",
+            "UID": "ca4d2cfaef07f489"
+          },
+          "Version": "3.1",
+          "Locations": [
+            {
+              "StartLine": 54,
+              "EndLine": 54
+            }
+          ],
+          "AnalyzedBy": "pip"
+        },
+        {
+          "Name": "pydantic",
+          "Identifier": {
+            "PURL": "pkg:pypi/pydantic@2.7.1",
+            "UID": "d319239632745e42"
+          },
+          "Version": "2.7.1",
+          "Locations": [
+            {
+              "StartLine": 56,
+              "EndLine": 56
+            }
+          ],
+          "AnalyzedBy": "pip"
+        },
+        {
+          "Name": "pydantic-settings",
+          "Identifier": {
+            "PURL": "pkg:pypi/pydantic-settings@2.2.1",
+            "UID": "49b2f819238d16df"
+          },
+          "Version": "2.2.1",
+          "Locations": [
+            {
+              "StartLine": 55,
+              "EndLine": 55
+            }
+          ],
+          "AnalyzedBy": "pip"
+        },
+        {
+          "Name": "pydantic_core",
+          "Identifier": {
+            "PURL": "pkg:pypi/pydantic-core@2.18.2",
+            "UID": "7e5d098907acb02a"
+          },
+          "Version": "2.18.2",
+          "Locations": [
+            {
+              "StartLine": 57,
+              "EndLine": 57
+            }
+          ],
+          "AnalyzedBy": "pip"
+        },
+        {
+          "Name": "python-dotenv",
+          "Identifier": {
+            "PURL": "pkg:pypi/python-dotenv@1.2.4",
+            "UID": "7272ae38565d3239"
+          },
+          "Version": "1.2.4",
+          "Locations": [
+            {
+              "StartLine": 58,
+              "EndLine": 58
+            }
+          ],
+          "AnalyzedBy": "pip"
+        },
+        {
+          "Name": "python-multipart",
+          "Identifier": {
+            "PURL": "pkg:pypi/python-multipart@0.0.32",
+            "UID": "f158b9b3783de930"
+          },
+          "Version": "0.0.32",
+          "Locations": [
+            {
+              "StartLine": 59,
+              "EndLine": 59
+            }
+          ],
+          "AnalyzedBy": "pip"
+        },
+        {
+          "Name": "redis",
+          "Identifier": {
+            "PURL": "pkg:pypi/redis@5.0.4",
+            "UID": "8ee4b67935024fb7"
+          },
+          "Version": "5.0.4",
+          "Locations": [
+            {
+              "StartLine": 60,
+              "EndLine": 60
+            }
+          ],
+          "AnalyzedBy": "pip"
+        },
+        {
+          "Name": "requests",
+          "Identifier": {
+            "PURL": "pkg:pypi/requests@2.34.2",
+            "UID": "827f5dcf475f8c29"
+          },
+          "Version": "2.34.2",
+          "Locations": [
+            {
+              "StartLine": 61,
+              "EndLine": 61
+            }
+          ],
+          "AnalyzedBy": "pip"
+        },
+        {
+          "Name": "rich",
+          "Identifier": {
+            "PURL": "pkg:pypi/rich@15.0.0",
+            "UID": "98e2664d45827a37"
+          },
+          "Version": "15.0.0",
+          "Locations": [
+            {
+              "StartLine": 63,
+              "EndLine": 63
+            }
+          ],
+          "AnalyzedBy": "pip"
+        },
+        {
+          "Name": "rich-toolkit",
+          "Identifier": {
+            "PURL": "pkg:pypi/rich-toolkit@0.20.6",
+            "UID": "c4f7adb71569385f"
+          },
+          "Version": "0.20.6",
+          "Locations": [
+            {
+              "StartLine": 62,
+              "EndLine": 62
+            }
+          ],
+          "AnalyzedBy": "pip"
+        },
+        {
+          "Name": "shellingham",
+          "Identifier": {
+            "PURL": "pkg:pypi/shellingham@1.5.4",
+            "UID": "e5f599e674d87fea"
+          },
+          "Version": "1.5.4",
+          "Locations": [
+            {
+              "StartLine": 64,
+              "EndLine": 64
+            }
+          ],
+          "AnalyzedBy": "pip"
+        },
+        {
+          "Name": "sniffio",
+          "Identifier": {
+            "PURL": "pkg:pypi/sniffio@1.3.1",
+            "UID": "befc5cfee99f0955"
+          },
+          "Version": "1.3.1",
+          "Locations": [
+            {
+              "StartLine": 65,
+              "EndLine": 65
+            }
+          ],
+          "AnalyzedBy": "pip"
+        },
+        {
+          "Name": "starlette",
+          "Identifier": {
+            "PURL": "pkg:pypi/starlette@0.37.2",
+            "UID": "98811f75d7d3d0c8"
+          },
+          "Version": "0.37.2",
+          "Locations": [
+            {
+              "StartLine": 66,
+              "EndLine": 66
+            }
+          ],
+          "AnalyzedBy": "pip"
+        },
+        {
+          "Name": "tenacity",
+          "Identifier": {
+            "PURL": "pkg:pypi/tenacity@8.3.0",
+            "UID": "7ae084bce5ef0ef5"
+          },
+          "Version": "8.3.0",
+          "Locations": [
+            {
+              "StartLine": 67,
+              "EndLine": 67
+            }
+          ],
+          "AnalyzedBy": "pip"
+        },
+        {
+          "Name": "typer",
+          "Identifier": {
+            "PURL": "pkg:pypi/typer@0.27.3",
+            "UID": "a4555bd2e45322a2"
+          },
+          "Version": "0.27.3",
+          "Locations": [
+            {
+              "StartLine": 68,
+              "EndLine": 68
+            }
+          ],
+          "AnalyzedBy": "pip"
+        },
+        {
+          "Name": "typing_extensions",
+          "Identifier": {
+            "PURL": "pkg:pypi/typing-extensions@4.16.0",
+            "UID": "ce3e7cc617ca4bb9"
+          },
+          "Version": "4.16.0",
+          "Licenses": [
+            "PSF-2.0"
+          ],
+          "Locations": [
+            {
+              "StartLine": 69,
+              "EndLine": 69
+            }
+          ],
+          "AnalyzedBy": "pip"
+        },
+        {
+          "Name": "ujson",
+          "Identifier": {
+            "PURL": "pkg:pypi/ujson@6.0.0",
+            "UID": "edb3a2f89acb7e58"
+          },
+          "Version": "6.0.0",
+          "Locations": [
+            {
+              "StartLine": 70,
+              "EndLine": 70
+            }
+          ],
+          "AnalyzedBy": "pip"
+        },
+        {
+          "Name": "urllib3",
+          "Identifier": {
+            "PURL": "pkg:pypi/urllib3@2.8.0",
+            "UID": "fba592ec91b51429"
+          },
+          "Version": "2.8.0",
+          "Locations": [
+            {
+              "StartLine": 71,
+              "EndLine": 71
+            }
+          ],
+          "AnalyzedBy": "pip"
+        },
+        {
+          "Name": "uvicorn",
+          "Identifier": {
+            "PURL": "pkg:pypi/uvicorn@0.29.0",
+            "UID": "33c96d4dfbe7d59"
+          },
+          "Version": "0.29.0",
+          "Locations": [
+            {
+              "StartLine": 72,
+              "EndLine": 72
+            }
+          ],
+          "AnalyzedBy": "pip"
+        },
+        {
+          "Name": "uvloop",
+          "Identifier": {
+            "PURL": "pkg:pypi/uvloop@0.23.0",
+            "UID": "26222cbfd7884168"
+          },
+          "Version": "0.23.0",
+          "Locations": [
+            {
+              "StartLine": 73,
+              "EndLine": 73
+            }
+          ],
+          "AnalyzedBy": "pip"
+        },
+        {
+          "Name": "watchfiles",
+          "Identifier": {
+            "PURL": "pkg:pypi/watchfiles@1.3.0",
+            "UID": "dc32b9496c758895"
+          },
+          "Version": "1.3.0",
+          "Locations": [
+            {
+              "StartLine": 74,
+              "EndLine": 74
+            }
+          ],
+          "AnalyzedBy": "pip"
+        },
+        {
+          "Name": "websockets",
+          "Identifier": {
+            "PURL": "pkg:pypi/websockets@17.2",
+            "UID": "94e0d4f54c078168"
+          },
+          "Version": "17.2",
+          "Locations": [
+            {
+              "StartLine": 75,
+              "EndLine": 75
+            }
+          ],
+          "AnalyzedBy": "pip"
+        },
+        {
+          "Name": "wrapt",
+          "Identifier": {
+            "PURL": "pkg:pypi/wrapt@2.5.0",
+            "UID": "f9e3489e654fd476"
+          },
+          "Version": "2.5.0",
+          "Locations": [
+            {
+              "StartLine": 76,
+              "EndLine": 76
+            }
+          ],
+          "AnalyzedBy": "pip"
+        }
+      ],
+      "Vulnerabilities": [
+        {
+          "VulnerabilityID": "CVE-2024-47874",
+          "VendorIDs": [
+            "GHSA-f96h-pmfr-66vw"
+          ],
+          "PkgName": "starlette",
+          "PkgIdentifier": {
+            "PURL": "pkg:pypi/starlette@0.37.2",
+            "UID": "98811f75d7d3d0c8"
+          },
+          "InstalledVersion": "0.37.2",
+          "FixedVersion": "0.40.0",
+          "Status": "fixed",
+          "SeveritySource": "ghsa",
+          "PrimaryURL": "https://avd.aquasec.com/nvd/cve-2024-47874",
+          "DataSource": {
+            "ID": "ghsa",
+            "Name": "GitHub Security Advisory pip",
+            "URL": "https://github.com/advisories?query=type%3Areviewed+ecosystem%3Apip"
+          },
+          "Fingerprint": "sha256:6330a7be6a66e0c7d811383094b5365679351818c5fcf55097d98d6191b4620d",
+          "Title": "starlette: Starlette Denial of service (DoS) via multipart/form-data",
+          "Description": "Starlette is an Asynchronous Server Gateway Interface (ASGI) framework/toolkit. Prior to version 0.40.0, Starlette treats `multipart/form-data` parts without a `filename` as text form fields and buffers those in byte strings with no size limit. This allows an attacker to upload arbitrary large form fields and cause Starlette to both slow down significantly due to excessive memory allocations and copy operations, and also consume more and more memory until the server starts swapping and grinds to a halt, or the OS terminates the server process with an OOM error. Uploading multiple such requests in parallel may be enough to render a service practically unusable, even if reasonable request size limits are enforced by a reverse proxy in front of Starlette. This Denial of service (DoS) vulnerability affects all applications built with Starlette (or FastAPI) accepting form requests. Verison 0.40.0 fixes this issue.",
+          "Severity": "HIGH",
+          "CweIDs": [
+            "CWE-770"
+          ],
+          "VendorSeverity": {
+            "ghsa": 3,
+            "redhat": 3
+          },
+          "CVSS": {
+            "ghsa": {
+              "V3Vector": "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:N/I:N/A:N",
+              "V40Vector": "CVSS:4.0/AV:N/AC:L/AT:N/PR:N/UI:N/VC:N/VI:N/VA:H/SC:N/SI:N/SA:N",
+              "V40Score": 8.7
+            },
+            "redhat": {
+              "V3Vector": "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:N/I:N/A:H",
+              "V3Score": 7.5
+            }
+          },
+          "References": [
+            "https://access.redhat.com/security/cve/CVE-2024-47874",
+            "https://github.com/encode/starlette",
+            "https://github.com/encode/starlette/commit/fd038f3070c302bff17ef7d173dbb0b007617733",
+            "https://github.com/encode/starlette/security/advisories/GHSA-f96h-pmfr-66vw",
+            "https://nvd.nist.gov/vuln/detail/CVE-2024-47874",
+            "https://www.cve.org/CVERecord?id=CVE-2024-47874"
+          ],
+          "PublishedDate": "2024-10-15T16:15:05.26Z",
+          "LastModifiedDate": "2026-06-17T07:57:53.817Z"
+        },
+        {
+          "VulnerabilityID": "CVE-2026-48818",
+          "VendorIDs": [
+            "GHSA-wqp7-x3pw-xc5r"
+          ],
+          "PkgName": "starlette",
+          "PkgIdentifier": {
+            "PURL": "pkg:pypi/starlette@0.37.2",
+            "UID": "98811f75d7d3d0c8"
+          },
+          "InstalledVersion": "0.37.2",
+          "FixedVersion": "1.1.0",
+          "Status": "fixed",
+          "SeveritySource": "ghsa",
+          "PrimaryURL": "https://avd.aquasec.com/nvd/cve-2026-48818",
+          "DataSource": {
+            "ID": "ghsa",
+            "Name": "GitHub Security Advisory pip",
+            "URL": "https://github.com/advisories?query=type%3Areviewed+ecosystem%3Apip"
+          },
+          "Fingerprint": "sha256:03b955e1e043fbc814e0d7f7549ac0300902dcbbdeff5b37e340f91b4962e319",
+          "Title": "starlette: Starlette: SSRF and NTLM credential theft via UNC paths in StaticFiles on Windows",
+          "Description": "Starlette is a lightweight ASGI framework/toolkit. In versions 1.0.1 and earlier, StaticFiles on Windows is vulnerable to SSRF. An UNC path such as \\\\attacker.com\\share can cause os.path.realpath to initiate an outbound SMB connection before the path is rejected, exposing the service account’s NTLMv2 credentials for offline cracking or relay even though the HTTP response is only a 404. The issue affects default follow_symlink=False deployments, including frameworks built on Starlette such as FastAPI; POSIX systems and follow_symlink=True are unaffected. The issue is fixed in 1.1.0.",
+          "Severity": "HIGH",
+          "CweIDs": [
+            "CWE-918"
+          ],
+          "VendorSeverity": {
+            "ghsa": 3,
+            "redhat": 3
+          },
+          "CVSS": {
+            "ghsa": {
+              "V3Vector": "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:N/A:N",
+              "V3Score": 7.5
+            },
+            "redhat": {
+              "V3Vector": "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:N/A:N",
+              "V3Score": 7.5
+            }
+          },
+          "References": [
+            "https://access.redhat.com/errata/RHSA-2026:30087",
+            "https://access.redhat.com/errata/RHSA-2026:30088",
+            "https://access.redhat.com/errata/RHSA-2026:30089",
+            "https://access.redhat.com/security/cve/CVE-2026-48818",
+            "https://advisory.echohq.com/cve/CVE-2026-48818",
+            "https://bugzilla.redhat.com/show_bug.cgi?id=2490020",
+            "https://github.com/Kludex/starlette",
+            "https://github.com/Kludex/starlette/commit/fd53168a7767b6b55ba5af787fd88f49e33cabc5",
+            "https://github.com/Kludex/starlette/pull/3287",
+            "https://github.com/Kludex/starlette/releases/tag/1.1.0",
+            "https://github.com/Kludex/starlette/security/advisories/GHSA-wqp7-x3pw-xc5r",
+            "https://github.com/pypa/advisory-database/tree/main/vulns/starlette/PYSEC-2026-2281.yaml",
+            "https://nvd.nist.gov/vuln/detail/CVE-2026-48818",
+            "https://security.access.redhat.com/data/csaf/v2/vex/2026/cve-2026-48818.json",
+            "https://www.cve.org/CVERecord?id=CVE-2026-48818"
+          ],
+          "PublishedDate": "2026-06-17T19:18:09.807Z",
+          "LastModifiedDate": "2026-08-04T19:16:51.383Z"
+        },
+        {
+          "VulnerabilityID": "CVE-2026-54283",
+          "VendorIDs": [
+            "GHSA-82w8-qh3p-5jfq"
+          ],
+          "PkgName": "starlette",
+          "PkgIdentifier": {
+            "PURL": "pkg:pypi/starlette@0.37.2",
+            "UID": "98811f75d7d3d0c8"
+          },
+          "InstalledVersion": "0.37.2",
+          "FixedVersion": "1.3.1",
+          "Status": "fixed",
+          "SeveritySource": "ghsa",
+          "PrimaryURL": "https://avd.aquasec.com/nvd/cve-2026-54283",
+          "DataSource": {
+            "ID": "ghsa",
+            "Name": "GitHub Security Advisory pip",
+            "URL": "https://github.com/advisories?query=type%3Areviewed+ecosystem%3Apip"
+          },
+          "Fingerprint": "sha256:7cfb9363990071ab9db7873fa952dfc1148afc4510fe432eb0bb43ad8d92da49",
+          "Title": "starlette: Starlette: request.form() limits silently ignored for application/x-www-form-urlencoded enable DoS",
+          "Description": "Starlette is a lightweight ASGI framework/toolkit. From 0.4.1 until 1.3.1, request.form() accepts max_fields and max_part_size to bound resource consumption while parsing form data. These limits are enforced for multipart/form-data, but silently ignored for application/x-www-form-urlencoded. An unauthenticated attacker can therefore send a urlencoded body with an arbitrarily large number of fields or an arbitrarily large field, even when the application configured limits it believed would apply. This vulnerability is fixed in 1.3.1.",
+          "Severity": "HIGH",
+          "CweIDs": [
+            "CWE-770"
+          ],
+          "VendorSeverity": {
+            "ghsa": 3,
+            "redhat": 3
+          },
+          "CVSS": {
+            "ghsa": {
+              "V3Vector": "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:N/I:N/A:H",
+              "V3Score": 7.5
+            },
+            "redhat": {
+              "V3Vector": "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:N/I:N/A:H",
+              "V3Score": 7.5
+            }
+          },
+          "References": [
+            "https://access.redhat.com/security/cve/CVE-2026-54283",
+            "https://advisory.echohq.com/cve/CVE-2026-54283",
+            "https://github.com/Kludex/starlette",
+            "https://github.com/Kludex/starlette/security/advisories/GHSA-82w8-qh3p-5jfq",
+            "https://nvd.nist.gov/vuln/detail/CVE-2026-54283",
+            "https://www.cve.org/CVERecord?id=CVE-2026-54283"
+          ],
+          "PublishedDate": "2026-06-22T18:16:46.943Z",
+          "LastModifiedDate": "2026-06-26T19:16:55.75Z"
+        },
+        {
+          "VulnerabilityID": "CVE-2025-54121",
+          "VendorIDs": [
+            "GHSA-2c2j-9gv5-cj73"
+          ],
+          "PkgName": "starlette",
+          "PkgIdentifier": {
+            "PURL": "pkg:pypi/starlette@0.37.2",
+            "UID": "98811f75d7d3d0c8"
+          },
+          "InstalledVersion": "0.37.2",
+          "FixedVersion": "0.47.2",
+          "Status": "fixed",
+          "SeveritySource": "ghsa",
+          "PrimaryURL": "https://avd.aquasec.com/nvd/cve-2025-54121",
+          "DataSource": {
+            "ID": "ghsa",
+            "Name": "GitHub Security Advisory pip",
+            "URL": "https://github.com/advisories?query=type%3Areviewed+ecosystem%3Apip"
+          },
+          "Fingerprint": "sha256:e8636b8a4225d5045d20e61542187ad33ad4dd117dc0bedb09748c2e934d2da6",
+          "Title": "starlette: Starlette denial-of-service",
+          "Description": "Starlette is a lightweight ASGI (Asynchronous Server Gateway Interface) framework/toolkit, designed for building async web services in Python. In versions 0.47.1 and below, when parsing a multi-part form with large files (greater than the default max spool size) starlette will block the main thread to roll the file over to disk. This blocks the event thread which means the application can't accept new connections. The UploadFile code has a minor bug where instead of just checking for self._in_memory, the logic should also check if the additional bytes will cause a rollover. The vulnerability is fixed in version 0.47.2.",
+          "Severity": "MEDIUM",
+          "CweIDs": [
+            "CWE-770"
+          ],
+          "VendorSeverity": {
+            "ghsa": 2,
+            "redhat": 2
+          },
+          "CVSS": {
+            "ghsa": {
+              "V3Vector": "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:N/I:N/A:L",
+              "V3Score": 5.3
+            },
+            "redhat": {
+              "V3Vector": "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:N/I:N/A:L",
+              "V3Score": 5.3
+            }
+          },
+          "References": [
+            "https://access.redhat.com/security/cve/CVE-2025-54121",
+            "https://github.com/encode/starlette",
+            "https://github.com/encode/starlette/blob/fa5355442753f794965ae1af0f87f9fec1b9a3de/starlette/datastructures.py#L436C5-L447C14",
+            "https://github.com/encode/starlette/commit/9f7ec2eb512fcc3fe90b43cb9dd9e1d08696bec1",
+            "https://github.com/encode/starlette/discussions/2927#discussioncomment-13721403",
+            "https://github.com/encode/starlette/security/advisories/GHSA-2c2j-9gv5-cj73",
+            "https://nvd.nist.gov/vuln/detail/CVE-2025-54121",
+            "https://www.cve.org/CVERecord?id=CVE-2025-54121"
+          ],
+          "PublishedDate": "2025-07-21T20:15:41.827Z",
+          "LastModifiedDate": "2026-06-17T09:39:29.22Z"
+        },
+        {
+          "VulnerabilityID": "CVE-2026-48710",
+          "VendorIDs": [
+            "GHSA-86qp-5c8j-p5mr"
+          ],
+          "PkgName": "starlette",
+          "PkgIdentifier": {
+            "PURL": "pkg:pypi/starlette@0.37.2",
+            "UID": "98811f75d7d3d0c8"
+          },
+          "InstalledVersion": "0.37.2",
+          "FixedVersion": "1.0.1",
+          "Status": "fixed",
+          "SeveritySource": "ghsa",
+          "PrimaryURL": "https://avd.aquasec.com/nvd/cve-2026-48710",
+          "DataSource": {
+            "ID": "ghsa",
+            "Name": "GitHub Security Advisory pip",
+            "URL": "https://github.com/advisories?query=type%3Areviewed+ecosystem%3Apip"
+          },
+          "Fingerprint": "sha256:0d3bd83411163d506bfa640028e14e3c96183b5995eb664e4a7ca5eb82505ad8",
+          "Title": "starlette: Starlette: Security restriction bypass via malformed HTTP Host header",
+          "Description": "Starlette is a lightweight ASGI framework/toolkit. Prior to version 1.0.1, the HTTP `Host` request header was not validated before being used to reconstruct `request.url`. Because the routing algorithm relies on the raw HTTP path while `request.url` is rebuilt from the `Host` header, a malformed header could make `request.url.path` differ from the path that was actually requested. Middleware and endpoints that apply security restrictions based on `request.url` (rather than the raw `scope` path) could therefore be bypassed. Users should upgrade to a version greater than or equal to version 1.0.1, which validates the `Host` header against the grammar of RFC 9112 §3.2 / RFC 3986 §3.2.2 when constructing `request.url` and falls back to `scope[\"server\"]` for malformed values.",
+          "Severity": "MEDIUM",
+          "CweIDs": [
+            "CWE-444",
+            "CWE-1289"
+          ],
+          "VendorSeverity": {
+            "ghsa": 2,
+            "nvd": 2,
+            "redhat": 2
+          },
+          "CVSS": {
+            "ghsa": {
+              "V3Vector": "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:L/I:L/A:N",
+              "V3Score": 6.5
+            },
+            "nvd": {
+              "V3Vector": "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:L/I:L/A:N",
+              "V3Score": 6.5
+            },
+            "redhat": {
+              "V3Vector": "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:L/I:L/A:N",
+              "V3Score": 6.5
+            }
+          },
+          "References": [
+            "https://access.redhat.com/errata/RHSA-2026:22992",
+            "https://access.redhat.com/errata/RHSA-2026:22993",
+            "https://access.redhat.com/errata/RHSA-2026:23346",
+            "https://access.redhat.com/errata/RHSA-2026:24866",
+            "https://access.redhat.com/errata/RHSA-2026:26226",
+            "https://access.redhat.com/errata/RHSA-2026:30088",
+            "https://access.redhat.com/errata/RHSA-2026:30089",
+            "https://access.redhat.com/errata/RHSA-2026:34456",
+            "https://access.redhat.com/errata/RHSA-2026:34526",
+            "https://access.redhat.com/errata/RHSA-2026:34532",
+            "https://access.redhat.com/errata/RHSA-2026:37275",
+            "https://access.redhat.com/errata/RHSA-2026:43038",
+            "https://access.redhat.com/errata/RHSA-2026:44696",
+            "https://access.redhat.com/errata/RHSA-2026:51357",
+            "https://access.redhat.com/errata/RHSA-2026:60520",
+            "https://access.redhat.com/errata/RHSA-2026:63337",
+            "https://access.redhat.com/security/cve/CVE-2026-48710",
+            "https://advisory.echohq.com/cve/CVE-2026-48710",
+            "https://badhost.org",
+            "https://bugzilla.redhat.com/show_bug.cgi?id=2481742",
+            "https://github.com/Kludex/starlette",
+            "https://github.com/Kludex/starlette/commit/764dab0dcfb9033d75442d7a359645c9f94648c6",
+            "https://github.com/Kludex/starlette/security/advisories/GHSA-86qp-5c8j-p5mr",
+            "https://github.com/pypa/advisory-database/tree/main/vulns/starlette/PYSEC-2026-161.yaml",
+            "https://nvd.nist.gov/vuln/detail/CVE-2026-48710",
+            "https://ostif.org/disclosing-the-badhost-vulnerability-in-starlette",
+            "https://security.access.redhat.com/data/csaf/v2/vex/2026/cve-2026-48710.json",
+            "https://www.cisa.gov/known-exploited-vulnerabilities-catalog",
+            "https://www.cisa.gov/known-exploited-vulnerabilities-catalog?field_cve=CVE-2026-48710",
+            "https://www.cve.org/CVERecord?id=CVE-2026-48710",
+            "https://www.secwest.net/starlette",
+            "https://www.wiz.io/blog/ai-infrastructure-honeypot",
+            "https://www.x41-dsec.de/lab/advisories/x41-2026-002-starlette",
+            "https:/www.microsoft.com/en-us/security/blog/2026/08/26/when-ai-infrastructure-becomes-target-securing-gateways-control-points"
+          ],
+          "PublishedDate": "2026-05-26T22:16:44.02Z",
+          "LastModifiedDate": "2026-10-01T18:17:18.153Z"
+        },
+        {
+          "VulnerabilityID": "CVE-2026-48817",
+          "VendorIDs": [
+            "GHSA-x746-7m8f-x49c"
+          ],
+          "PkgName": "starlette",
+          "PkgIdentifier": {
+            "PURL": "pkg:pypi/starlette@0.37.2",
+            "UID": "98811f75d7d3d0c8"
+          },
+          "InstalledVersion": "0.37.2",
+          "FixedVersion": "1.1.0",
+          "Status": "fixed",
+          "SeveritySource": "ghsa",
+          "PrimaryURL": "https://avd.aquasec.com/nvd/cve-2026-48817",
+          "DataSource": {
+            "ID": "ghsa",
+            "Name": "GitHub Security Advisory pip",
+            "URL": "https://github.com/advisories?query=type%3Areviewed+ecosystem%3Apip"
+          },
+          "Fingerprint": "sha256:a938732ee306202230e45f389f15fac1d4e646ff92997379b34ab594e8007e78",
+          "Title": "starlette: Starlette: Information disclosure and unintended method execution via non-standard HTTP methods",
+          "Description": "Starlette is a lightweight ASGI framework/toolkit. In versions 1.0.1 and below, when dispatching a request, HTTPEndpoint selects the handler by lowercasing the HTTP method and looking it up as an attribute with getattr, without restricting the lookup to a known set of HTTP verbs. When an HTTPEndpoint subclass is registered through Route(...) without an explicit methods= argument, the route does not constrain the method and every method reaches the endpoint. If a non-standard HTTP method whose lowercased name matches an attribute on the endpoint subclass reaches the endpoint, that attribute is invoked as if it were a request handler. An attacker can use this to reach methods that were never meant to be HTTP handlers, such as internal helpers, without the authorization checks applied by the intended public handler. An application (including Starlette-based frameworks like FastAPI) is affected if it registers an HTTPEndpoint subclass via Route(...) without explicitly setting methods=, and that subclass includes extra methods named like non-standard HTTP verbs that take one request argument and return a response. This issue has been fixed in version 1.1.0.",
+          "Severity": "MEDIUM",
+          "CweIDs": [
+            "CWE-470"
+          ],
+          "VendorSeverity": {
+            "ghsa": 2,
+            "redhat": 2
+          },
+          "CVSS": {
+            "ghsa": {
+              "V3Vector": "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:N/I:L/A:N",
+              "V3Score": 5.3
+            },
+            "redhat": {
+              "V3Vector": "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:N/I:L/A:N",
+              "V3Score": 5.3
+            }
+          },
+          "References": [
+            "https://access.redhat.com/security/cve/CVE-2026-48817",
+            "https://advisory.echohq.com/cve/CVE-2026-48817",
+            "https://github.com/Kludex/starlette",
+            "https://github.com/Kludex/starlette/releases/tag/1.1.0",
+            "https://github.com/Kludex/starlette/security/advisories/GHSA-x746-7m8f-x49c",
+            "https://nvd.nist.gov/vuln/detail/CVE-2026-48817",
+            "https://www.cve.org/CVERecord?id=CVE-2026-48817"
+          ],
+          "PublishedDate": "2026-06-17T20:17:22.427Z",
+          "LastModifiedDate": "2026-06-26T19:18:13.38Z"
+        },
+        {
+          "VulnerabilityID": "CVE-2026-54282",
+          "VendorIDs": [
+            "GHSA-jp82-jpqv-5vv3"
+          ],
+          "PkgName": "starlette",
+          "PkgIdentifier": {
+            "PURL": "pkg:pypi/starlette@0.37.2",
+            "UID": "98811f75d7d3d0c8"
+          },
+          "InstalledVersion": "0.37.2",
+          "FixedVersion": "1.3.0",
+          "Status": "fixed",
+          "SeveritySource": "ghsa",
+          "PrimaryURL": "https://avd.aquasec.com/nvd/cve-2026-54282",
+          "DataSource": {
+            "ID": "ghsa",
+            "Name": "GitHub Security Advisory pip",
+            "URL": "https://github.com/advisories?query=type%3Areviewed+ecosystem%3Apip"
+          },
+          "Fingerprint": "sha256:2f8a4ac4acd31f7f445f365e2a585314ca8dc7272099363547f461d4b06cc77c",
+          "Title": "starlette: Starlette: Information disclosure due to improper HTTP request path validation",
+          "Description": "Starlette is a lightweight ASGI framework/toolkit. Prior to 1.3.0, the HTTP request path is not validated before being used to reconstruct request.url. Because request.url is rebuilt by concatenating {scheme}://{host}{path} and re-parsing the result, a path that does not begin with / (for example @google.com) moves the authority boundary during re-parsing, so request.url.hostname and request.url.netloc become attacker-controlled. Code that reads request.url.hostname (rather than the Host header or scope) can therefore be misled into trusting an attacker-supplied host. This vulnerability is fixed in 1.3.0.",
+          "Severity": "LOW",
+          "CweIDs": [
+            "CWE-706"
+          ],
+          "VendorSeverity": {
+            "ghsa": 1,
+            "nvd": 2,
+            "redhat": 1
+          },
+          "CVSS": {
+            "ghsa": {
+              "V3Vector": "CVSS:3.1/AV:N/AC:H/PR:N/UI:N/S:U/C:N/I:L/A:N",
+              "V3Score": 3.7
+            },
+            "nvd": {
+              "V3Vector": "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:N/I:L/A:N",
+              "V3Score": 5.3
+            },
+            "redhat": {
+              "V3Vector": "CVSS:3.1/AV:N/AC:H/PR:N/UI:N/S:U/C:L/I:L/A:N",
+              "V3Score": 4.8
+            }
+          },
+          "References": [
+            "https://access.redhat.com/security/cve/CVE-2026-54282",
+            "https://advisory.echohq.com/cve/CVE-2026-54282",
+            "https://github.com/Kludex/starlette",
+            "https://github.com/Kludex/starlette/security/advisories/GHSA-jp82-jpqv-5vv3",
+            "https://github.com/pypa/advisory-database/tree/main/vulns/starlette/PYSEC-2026-248.yaml",
+            "https://nvd.nist.gov/vuln/detail/CVE-2026-54282",
+            "https://www.cve.org/CVERecord?id=CVE-2026-54282"
+          ],
+          "PublishedDate": "2026-06-22T18:16:46.807Z",
+          "LastModifiedDate": "2026-06-26T19:18:47.063Z"
+        }
+      ]
+    }
+  ]
+}

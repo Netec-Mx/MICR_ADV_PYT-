@@ -1,0 +1,12 @@
+global:
+  resolve_timeout: 1m
+route:
+  receiver: lab-ui
+  group_by:
+  - alertname
+  - service
+  group_wait: 5s
+  group_interval: 15s
+  repeat_interval: 3h
+receivers:
+- name: lab-ui

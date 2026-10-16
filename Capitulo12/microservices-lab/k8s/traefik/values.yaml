@@ -1,0 +1,45 @@
+image:
+  tag: v3.7.14
+deployment:
+  replicas: 1
+service:
+  type: ClusterIP
+providers:
+  kubernetesCRD:
+    enabled: true
+    allowCrossNamespace: false
+    namespaces:
+    - microservices
+  kubernetesIngress:
+    enabled: false
+  kubernetesGateway:
+    enabled: false
+ingressRoute:
+  dashboard:
+    enabled: false
+ports:
+  web:
+    port: 8000
+    exposedPort: 80
+    expose:
+      default: true
+  websecure:
+    expose:
+      default: false
+api:
+  dashboard: false
+resources:
+  requests:
+    cpu: 100m
+    memory: 128Mi
+  limits:
+    cpu: '1'
+    memory: 512Mi
+log:
+  level: INFO
+accessLog:
+  enabled: true
+  format: json
+  fields:
+    headers:
+      defaultMode: drop

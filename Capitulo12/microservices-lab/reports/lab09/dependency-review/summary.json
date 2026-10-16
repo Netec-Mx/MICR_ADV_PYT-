@@ -1,0 +1,38 @@
+[
+  {
+    "service": "order-service",
+    "scope": "Python dependency lock ONLY, not container/OS",
+    "before": {
+      "all": 7,
+      "HIGH_CRITICAL": 3
+    },
+    "after": {
+      "all": 0,
+      "HIGH_CRITICAL": 0
+    }
+  },
+  {
+    "service": "inventory-service",
+    "scope": "Python dependency lock ONLY, not container/OS",
+    "before": {
+      "all": 7,
+      "HIGH_CRITICAL": 3
+    },
+    "after": {
+      "all": 0,
+      "HIGH_CRITICAL": 0
+    }
+  },
+  {
+    "service": "users-service",
+    "scope": "Python dependency lock ONLY, not container/OS",
+    "before": {
+      "all": 7,
+      "HIGH_CRITICAL": 3
+    },
+    "after": {
+      "all": 0,
+      "HIGH_CRITICAL": 0
+    }
+  }
+]

@@ -1,0 +1,11 @@
+.venv/
+__pycache__/
+.pytest_cache/
+.hypothesis/
+*.pyc
+
+# Local OAuth token files
+*-token.json
+token.json
+
+.venv312/

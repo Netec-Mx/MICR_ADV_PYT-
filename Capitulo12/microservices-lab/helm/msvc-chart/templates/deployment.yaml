@@ -1,0 +1,49 @@
+{{- if ne .Release.Namespace "microservices" }}{{ fail "Lab 9 requires namespace microservices (Vault role binding)" }}{{ end }}
+{{- if ne (index .Values.env "VAULT_ROLE") .Values.name }}{{ fail "VAULT_ROLE must equal service name" }}{{ end }}
+{{- if ne (index .Values.env "VAULT_SECRET_PATH") .Values.name }}{{ fail "VAULT_SECRET_PATH must equal service name" }}{{ end }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ .Values.name }}
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "msvc.labels" . | nindent 4 }}
+spec:
+  progressDeadlineSeconds: 420
+  revisionHistoryLimit: 5
+  replicas: {{ .Values.replicaCount }}
+  selector:
+    matchLabels:
+      app: {{ .Values.name }}
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxUnavailable: 0
+      maxSurge: 1
+  template:
+    metadata:
+      labels:
+        {{- if .Values.mesh.enabled }}
+        sidecar.istio.io/inject: "true"
+        lab10-mesh: "true"
+        lab10-service: {{ .Values.name }}
+        version: {{ .Values.mesh.variant }}
+        service.istio.io/canonical-name: {{ .Values.name }}
+        service.istio.io/canonical-revision: {{ .Values.mesh.variant }}
+        {{- end }}
+        {{- include "msvc.labels" . | nindent 8 }}
+      annotations:
+        {{- if .Values.mesh.enabled }}
+        prometheus.io/scrape: "true"
+        prometheus.io/path: /metrics
+        prometheus.io/port: {{ .Values.port | quote }}
+        proxy.istio.io/config: '{"holdApplicationUntilProxyStarts":true}'
+        sidecar.istio.io/rewriteAppHTTPProbers: "true"
+        sidecar.istio.io/proxyCPU: "100m"
+        sidecar.istio.io/proxyCPULimit: "500m"
+        sidecar.istio.io/proxyMemory: "128Mi"
+        sidecar.istio.io/proxyMemoryLimit: "256Mi"
+        {{- end }}
+        checksum/config: {{ include (print $.Template.BasePath "/configmap.yaml") . | sha256sum }}
+    spec:
+{{ include "msvc.pod" (dict "root" . "extra" false "variant" .Values.mesh.variant "repository" .Values.image.repository "digest" .Values.image.digest) | indent 6 }}

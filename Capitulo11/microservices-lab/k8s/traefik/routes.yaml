@@ -1,0 +1,57 @@
+apiVersion: traefik.io/v1alpha1
+kind: IngressRoute
+metadata:
+  name: orders-route
+  namespace: microservices
+spec:
+  entryPoints:
+  - web
+  routes:
+  - match: Host(`microservices.local`) && (Path(`/api/v1/orders`) || PathPrefix(`/api/v1/orders/`))
+    kind: Rule
+    priority: 20
+    services:
+    - name: order-service
+      port: 8001
+    middlewares:
+    - name: ratelimit-orders
+    - name: circuitbreaker-orders
+---
+apiVersion: traefik.io/v1alpha1
+kind: IngressRoute
+metadata:
+  name: inventory-route
+  namespace: microservices
+spec:
+  entryPoints:
+  - web
+  routes:
+  - match: Host(`microservices.local`) && (Path(`/api/v1/products`) || PathPrefix(`/api/v1/products/`)
+      || Path(`/api/v1/reservations`) || PathPrefix(`/api/v1/reservations/`))
+    kind: Rule
+    priority: 20
+    services:
+    - name: inventory-service
+      port: 8002
+    middlewares:
+    - name: ratelimit-inventory
+    - name: circuitbreaker-inventory
+---
+apiVersion: traefik.io/v1alpha1
+kind: IngressRoute
+metadata:
+  name: users-route
+  namespace: microservices
+spec:
+  entryPoints:
+  - web
+  routes:
+  - match: Host(`microservices.local`) && (Path(`/api/v1/users`) || PathPrefix(`/api/v1/users/`))
+    kind: Rule
+    priority: 20
+    services:
+    - name: users-service
+      port: 8003
+    middlewares:
+    - name: ratelimit-users
+    - name: circuitbreaker-users

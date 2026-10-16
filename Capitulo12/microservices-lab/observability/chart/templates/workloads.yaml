@@ -1,0 +1,528 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: otel-collector
+  namespace: observability
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app: otel-collector
+  template:
+    metadata:
+      labels:
+        app: otel-collector
+      annotations:
+        lab08/config-checksum: {{ include (print $.Template.BasePath "/configmaps.yaml") . | sha256sum | quote }}
+    spec:
+      automountServiceAccountToken: false
+      securityContext:
+        runAsUser: 10001
+        fsGroup: 10001
+      containers:
+      - name: otel-collector
+        image: {{ .Values.images.collector | quote }}
+        ports:
+        - name: p4317
+          containerPort: 4317
+        - name: p4318
+          containerPort: 4318
+        - name: p13133
+          containerPort: 13133
+        resources:
+          requests:
+            cpu: 100m
+            memory: 128Mi
+          limits:
+            cpu: '1'
+            memory: 512Mi
+        volumeMounts:
+        - name: config
+          mountPath: /etc/otel/collector.yaml
+          subPath: collector.yaml
+          readOnly: true
+        readinessProbe:
+          httpGet:
+            path: /
+            port: 13133
+          periodSeconds: 5
+        startupProbe:
+          httpGet:
+            path: /
+            port: 13133
+          periodSeconds: 5
+          failureThreshold: 60
+        securityContext:
+          allowPrivilegeEscalation: false
+          capabilities:
+            drop:
+            - ALL
+          runAsNonRoot: true
+        args:
+        - --config=/etc/otel/collector.yaml
+      volumes:
+      - name: config
+        configMap:
+          name: lab08-collector
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: otel-collector
+  namespace: observability
+spec:
+  selector:
+    app: otel-collector
+  ports:
+  - name: p4317
+    port: 4317
+    targetPort: 4317
+  - name: p4318
+    port: 4318
+    targetPort: 4318
+  - name: p13133
+    port: 13133
+    targetPort: 13133
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: jaeger
+  namespace: observability
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app: jaeger
+  template:
+    metadata:
+      labels:
+        app: jaeger
+      annotations:
+        lab08/config-checksum: {{ include (print $.Template.BasePath "/configmaps.yaml") . | sha256sum | quote }}
+    spec:
+      automountServiceAccountToken: false
+      securityContext:
+        runAsUser: 10001
+        fsGroup: 10001
+      containers:
+      - name: jaeger
+        image: {{ .Values.images.jaeger | quote }}
+        ports:
+        - name: p4317
+          containerPort: 4317
+        - name: p4318
+          containerPort: 4318
+        - name: p16686
+          containerPort: 16686
+        - name: p13133
+          containerPort: 13133
+        resources:
+          requests:
+            cpu: 100m
+            memory: 128Mi
+          limits:
+            cpu: '1'
+            memory: 512Mi
+        volumeMounts:
+        - name: config
+          mountPath: /etc/jaeger/jaeger.yaml
+          subPath: jaeger.yaml
+          readOnly: true
+        readinessProbe:
+          httpGet:
+            path: /status
+            port: 13133
+          periodSeconds: 5
+        startupProbe:
+          httpGet:
+            path: /status
+            port: 13133
+          periodSeconds: 5
+          failureThreshold: 60
+        securityContext:
+          allowPrivilegeEscalation: false
+          capabilities:
+            drop:
+            - ALL
+          runAsNonRoot: true
+        args:
+        - --config=/etc/jaeger/jaeger.yaml
+      volumes:
+      - name: config
+        configMap:
+          name: lab08-jaeger
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: jaeger
+  namespace: observability
+spec:
+  selector:
+    app: jaeger
+  ports:
+  - name: p4317
+    port: 4317
+    targetPort: 4317
+  - name: p4318
+    port: 4318
+    targetPort: 4318
+  - name: p16686
+    port: 16686
+    targetPort: 16686
+  - name: p13133
+    port: 13133
+    targetPort: 13133
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: prometheus
+  namespace: monitoring
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app: prometheus
+  template:
+    metadata:
+      labels:
+        app: prometheus
+      annotations:
+        lab08/config-checksum: {{ include (print $.Template.BasePath "/configmaps.yaml") . | sha256sum | quote }}
+    spec:
+      automountServiceAccountToken: false
+      securityContext:
+        runAsUser: 65534
+        fsGroup: 65534
+      containers:
+      - name: prometheus
+        image: {{ .Values.images.prometheus | quote }}
+        ports:
+        - name: p9090
+          containerPort: 9090
+        resources:
+          requests:
+            cpu: 100m
+            memory: 128Mi
+          limits:
+            cpu: '1'
+            memory: 1Gi
+        volumeMounts:
+        - name: config
+          mountPath: /etc/prometheus/prometheus.yaml
+          subPath: prometheus.yaml
+          readOnly: true
+        - name: config
+          mountPath: /etc/prometheus/rules.yaml
+          subPath: rules.yaml
+          readOnly: true
+        - name: demo
+          mountPath: /etc/prometheus/demo
+          readOnly: true
+        - name: data
+          mountPath: /prometheus
+        readinessProbe:
+          httpGet:
+            path: /-/ready
+            port: 9090
+          periodSeconds: 5
+        startupProbe:
+          httpGet:
+            path: /-/ready
+            port: 9090
+          periodSeconds: 5
+          failureThreshold: 60
+        securityContext:
+          allowPrivilegeEscalation: false
+          capabilities:
+            drop:
+            - ALL
+          runAsNonRoot: true
+        args:
+        - --config.file=/etc/prometheus/prometheus.yaml
+        - --storage.tsdb.path=/prometheus
+        - --storage.tsdb.retention.time=2d
+        - --web.enable-lifecycle
+{{ if and .Values.lab12 .Values.lab12.enabled }}
+        - --web.enable-remote-write-receiver
+{{ end }}
+      volumes:
+      - name: config
+        configMap:
+          name: lab08-prometheus
+      - name: demo
+        configMap:
+          name: lab08-demo-rules
+      - name: data
+        persistentVolumeClaim:
+          claimName: lab08-prometheus-data
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: prometheus
+  namespace: monitoring
+spec:
+  selector:
+    app: prometheus
+  ports:
+  - name: p9090
+    port: 9090
+    targetPort: 9090
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: alertmanager
+  namespace: monitoring
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app: alertmanager
+  template:
+    metadata:
+      labels:
+        app: alertmanager
+      annotations:
+        lab08/config-checksum: {{ include (print $.Template.BasePath "/configmaps.yaml") . | sha256sum | quote }}
+    spec:
+      automountServiceAccountToken: false
+      securityContext:
+        runAsUser: 65534
+        fsGroup: 65534
+      containers:
+      - name: alertmanager
+        image: {{ .Values.images.alertmanager | quote }}
+        ports:
+        - name: p9093
+          containerPort: 9093
+        resources:
+          requests:
+            cpu: 100m
+            memory: 128Mi
+          limits:
+            cpu: '1'
+            memory: 512Mi
+        volumeMounts:
+        - name: config
+          mountPath: /etc/alertmanager/alertmanager.yaml
+          subPath: alertmanager.yaml
+          readOnly: true
+        - name: data
+          mountPath: /alertmanager
+        readinessProbe:
+          httpGet:
+            path: /-/ready
+            port: 9093
+          periodSeconds: 5
+        startupProbe:
+          httpGet:
+            path: /-/ready
+            port: 9093
+          periodSeconds: 5
+          failureThreshold: 60
+        securityContext:
+          allowPrivilegeEscalation: false
+          capabilities:
+            drop:
+            - ALL
+          runAsNonRoot: true
+        args:
+        - --config.file=/etc/alertmanager/alertmanager.yaml
+        - --storage.path=/alertmanager
+        - --cluster.listen-address=
+      volumes:
+      - name: config
+        configMap:
+          name: lab08-alertmanager
+      - name: data
+        emptyDir: {}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: alertmanager
+  namespace: monitoring
+spec:
+  selector:
+    app: alertmanager
+  ports:
+  - name: p9093
+    port: 9093
+    targetPort: 9093
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: grafana
+  namespace: monitoring
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app: grafana
+  template:
+    metadata:
+      labels:
+        app: grafana
+      annotations:
+        lab08/config-checksum: {{ include (print $.Template.BasePath "/configmaps.yaml") . | sha256sum | quote }}
+    spec:
+      automountServiceAccountToken: false
+      securityContext:
+        runAsUser: 472
+        fsGroup: 472
+      containers:
+      - name: grafana
+        image: {{ .Values.images.grafana | quote }}
+        ports:
+        - name: p3000
+          containerPort: 3000
+        resources:
+          requests:
+            cpu: 100m
+            memory: 128Mi
+          limits:
+            cpu: '1'
+            memory: 512Mi
+        volumeMounts:
+        - name: config
+          mountPath: /etc/grafana/provisioning/datasources/lab.yaml
+          subPath: grafana-datasources.yaml
+          readOnly: true
+        - name: config
+          mountPath: /etc/grafana/provisioning/dashboards/lab.yaml
+          subPath: grafana-providers.yaml
+          readOnly: true
+        - name: config
+          mountPath: /var/lib/grafana/dashboards/red.json
+          subPath: dashboard.json
+{{ if and .Values.lab12 .Values.lab12.enabled }}
+        - name: config
+          mountPath: /var/lib/grafana/dashboards/lab12.json
+          subPath: lab12.json
+{{ end }}
+          readOnly: true
+        {{- if .Values.mesh.enabled }}
+        - name: mesh-dashboard
+          mountPath: /var/lib/grafana/dashboards/mesh.json
+          subPath: dashboard.json
+          readOnly: true
+        {{- end }}
+        - name: data
+          mountPath: /var/lib/grafana
+        readinessProbe:
+          httpGet:
+            path: /api/health
+            port: 3000
+          periodSeconds: 5
+        startupProbe:
+          httpGet:
+            path: /api/health
+            port: 3000
+          periodSeconds: 5
+          failureThreshold: 60
+        securityContext:
+          allowPrivilegeEscalation: false
+          capabilities:
+            drop:
+            - ALL
+          runAsNonRoot: true
+        env:
+        - name: GF_SECURITY_ADMIN_USER
+          valueFrom:
+            secretKeyRef:
+              name: lab08-grafana-admin
+              key: admin-user
+        - name: GF_SECURITY_ADMIN_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: lab08-grafana-admin
+              key: admin-password
+        - name: GF_USERS_ALLOW_SIGN_UP
+          value: 'false'
+        - name: GF_ANALYTICS_REPORTING_ENABLED
+          value: 'false'
+        - name: GF_ANALYTICS_CHECK_FOR_UPDATES
+          value: 'false'
+        - name: GF_ANALYTICS_CHECK_FOR_PLUGIN_UPDATES
+          value: 'false'
+      volumes:
+      - name: config
+        configMap:
+          name: lab08-grafana
+      {{- if .Values.mesh.enabled }}
+      - name: mesh-dashboard
+        configMap:
+          name: lab10-grafana-mesh
+      {{- end }}
+      - name: data
+        emptyDir: {}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: grafana
+  namespace: monitoring
+spec:
+  selector:
+    app: grafana
+  ports:
+  - name: p3000
+    port: 3000
+    targetPort: 3000
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: order-service-metrics
+  namespace: microservices
+spec:
+  publishNotReadyAddresses: true
+  selector:
+    app: order-service
+  ports:
+  - name: metrics
+    port: 8001
+    targetPort: {{ if .Values.mesh.enabled }}15020{{ else }}8001{{ end }}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: inventory-service-metrics
+  namespace: microservices
+spec:
+  publishNotReadyAddresses: true
+  selector:
+    app: inventory-service
+  ports:
+  - name: metrics
+    port: 8002
+    targetPort: {{ if .Values.mesh.enabled }}15020{{ else }}8002{{ end }}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: users-service-metrics
+  namespace: microservices
+spec:
+  publishNotReadyAddresses: true
+  selector:
+    app: users-service
+  ports:
+  - name: metrics
+    port: 8003
+    targetPort: {{ if .Values.mesh.enabled }}15020{{ else }}8003{{ end }}

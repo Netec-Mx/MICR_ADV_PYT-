@@ -1,0 +1,56 @@
+apiVersion: networking.istio.io/v1
+kind: DestinationRule
+metadata:
+  name: lab10-order-service
+  namespace: microservices
+spec:
+  host: order-service.microservices.svc.cluster.local
+  exportTo:
+  - '*'
+  trafficPolicy:
+    tls:
+      mode: ISTIO_MUTUAL
+  subsets:
+  - name: v1
+    labels:
+      version: v1
+  - name: v2
+    labels:
+      version: v2
+---
+apiVersion: networking.istio.io/v1
+kind: DestinationRule
+metadata:
+  name: lab10-inventory-service
+  namespace: microservices
+spec:
+  host: inventory-service.microservices.svc.cluster.local
+  exportTo:
+  - '*'
+  trafficPolicy:
+    tls:
+      mode: ISTIO_MUTUAL
+  subsets:
+  - name: blue
+    labels:
+      version: blue
+  - name: green
+    labels:
+      version: green
+---
+apiVersion: networking.istio.io/v1
+kind: DestinationRule
+metadata:
+  name: lab10-users-service
+  namespace: microservices
+spec:
+  host: users-service.microservices.svc.cluster.local
+  exportTo:
+  - '*'
+  trafficPolicy:
+    tls:
+      mode: ISTIO_MUTUAL
+  subsets:
+  - name: stable
+    labels:
+      version: stable

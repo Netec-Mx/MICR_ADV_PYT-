@@ -1,0 +1,13 @@
+{
+  "scanner": "Trivy 0.75.0",
+  "scope": "requirements.txt derived from exact Python locks; NOT image or OS scan",
+  "database": {
+    "Version": 2,
+    "NextUpdate": "2026-10-09T19:05:21.721408648Z",
+    "UpdatedAt": "2026-10-08T19:05:21.721409049Z",
+    "DownloadedAt": "2026-10-08T20:33:07.989767228Z"
+  },
+  "python": "3.12",
+  "original_high_critical_per_service": 3,
+  "remediated_high_critical_per_service": 0
+}

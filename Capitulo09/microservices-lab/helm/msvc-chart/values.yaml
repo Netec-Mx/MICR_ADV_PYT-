@@ -1,0 +1,16 @@
+name: order-service
+port: 8001
+replicaCount: 1
+appVersion: 9.0.0
+image:
+  repository: localhost:5000/order-service
+  digest: ''
+  pullPolicy: Always
+resources:
+  requests:
+    cpu: 100m
+    memory: 128Mi
+  limits:
+    cpu: '1'
+    memory: 512Mi
+env: {}
