@@ -1,3 +1,5 @@
+<img src="images/neteclogo (2).png" alt="logo" width="300"/>
+
 # Arquitectura Avanzada de Microservicios
 
 ## Plataforma de laboratorios
@@ -8,7 +10,7 @@ Te damos la bienvenida a la **plataforma de laboratorios** del curso **Arquitect
 
 Cada laboratorio continúa el trabajo del anterior. Haz clic en su título para abrir la guía y consulta sus requisitos antes de comenzar.
 
-> **Preparación y tiempos:** las duraciones estimadas corresponden a las asignadas a los laboratorios en el temario oficial: 42 min para el laboratorio 1, 57 min para el laboratorio 2 y 66 min para los laboratorios 3–12. Su suma es **759 min (12 h 39 min)** dentro de las **50 horas del curso**. Requieren herramientas, imágenes, dependencias y materiales preparados; no incluyen la instalación inicial ni la construcción de todo el código desde cero. Las guías revisadas de los laboratorios 11 y 12 recomiendan sesiones de 90–120 min; consulta las observaciones de cada uno antes de programarlos.
+
 
 ### Capítulo 1: Fundamentos avanzados y diseño de microservicios en Python
 
